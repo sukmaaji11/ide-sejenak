@@ -1,12 +1,13 @@
 "use strict";
 
-const CACHE_NAME = "sela-shell-v1";
+const CACHE_NAME = "sela-shell-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./styles-raised.css",
   "./app.js",
+  "./supabase-config.js",
   "./manifest.webmanifest",
   "./perbandingan.html",
   "./icons/sela-192.png",

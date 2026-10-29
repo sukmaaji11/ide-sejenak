@@ -20,7 +20,7 @@ Halaman `perbandingan.html` membandingkan posisi kartu input sebelum dan sesudah
 ## Alur produk
 
 1. Tulis judul ide; konteks singkat dan kategori bersifat opsional.
-2. Ide masuk ke daftar "Baru masuk" dan tersimpan di browser.
+2. Tanpa masuk akun, ide masuk ke daftar "Baru masuk" dan tersimpan di browser ini.
 3. Buka kembali ide kapan saja untuk mengisi masalah/kebutuhan, siapa yang terbantu, dan langkah kecil berikutnya.
 4. Pilih tahap ide: baru masuk, lagi dipikirkan, atau selesai dikembangkan.
 
@@ -28,4 +28,19 @@ Daftar awal memuat contoh ide agar alurnya mudah dicoba. Contoh dapat diedit ata
 
 ## Privasi
 
-Semua ide tersimpan di penyimpanan lokal browser pada perangkat dan profil yang sama. Data tidak disinkronkan atau dikirim ke server. Menghapus data situs/browser dapat menghapus ide.
+Mode lokal menyimpan ide di browser pada perangkat dan profil yang sama. Setelah masuk akun, Sela membaca dan menyimpan ide akun melalui Supabase; ide lokal tetap dipisahkan sampai pengguna secara eksplisit menekan **Gabungkan ide lokal ke akun**. Penggabungan hanya menambahkan ide yang belum ada dan tidak menimpa ide akun. Keluar akun akan kembali menampilkan data lokal.
+
+Sesi akun disimpan di `localStorage`, sehingga jangan masuk di perangkat bersama. Frontend hanya memakai URL Supabase dan anon/publishable key; jangan pernah menaruh `service_role` key di aplikasi browser.
+
+## Mengaktifkan akun dan sinkronisasi
+
+1. Buat proyek di [Supabase](https://supabase.com/), lalu buka **SQL Editor** pada proyek tersebut.
+2. Jalankan isi file `supabase-schema.sql`. Tabel `ideas` dan Row Level Security membatasi setiap operasi ke ide milik user yang sedang masuk.
+3. Buka **Project Settings → API Keys** (atau dialog **Connect**). Salin Project URL dan publishable key. Legacy anon key juga didukung.
+4. Isi nilai `url` dan `publishableKey` pada `supabase-config.js`. File ini memang berisi nilai publik yang digunakan browser; jangan masukkan secret/service-role key.
+5. Di pengaturan **Authentication → URL Configuration**, tambahkan URL GitHub Pages Sela sebagai Site URL dan Redirect URL, misalnya `https://sukmaaji11.github.io/ide-sejenak/`.
+6. Untuk verifikasi email, pastikan template/layanan email Supabase siap. Pengguna perlu mengonfirmasi email sebelum masuk jika konfirmasi email diaktifkan.
+7. Deploy perubahan ke hosting HTTPS, lalu coba buat akun, masuk, simpan ide, dan buka Sela pada perangkat/browser lain.
+
+Tautan **Lupa password?** mengirim email pemulihan dan membuka formulir untuk menetapkan password baru di Sela.
+Tanpa konfigurasi Supabase, tombol akun tetap menjelaskan bahwa sinkronisasi belum aktif dan mode lokal tetap dapat digunakan. Jangan membagikan password akun atau secret key. Setelah mengubah file konfigurasi atau skema, deploy ulang situs dan pastikan `supabase-config.js` dapat dimuat.

@@ -2,6 +2,12 @@
 
 const STORAGE_KEY = "sela.ideas.v1";
 const ONBOARDING_KEY = "sela.onboarding.completed.v1";
+const AUTH_STORAGE_KEY = "sela.auth.session.v1";
+const SUPABASE = window.SELA_SUPABASE || { url: "", publishableKey: "" };
+const SUPABASE_URL = typeof SUPABASE.url === "string" ? SUPABASE.url.replace(/\/+$/, "") : "";
+const SUPABASE_API_KEY = typeof SUPABASE.publishableKey === "string"
+  ? SUPABASE.publishableKey.trim()
+  : typeof SUPABASE.anonKey === "string" ? SUPABASE.anonKey.trim() : "";
 const STATUSES = {
   inbox: "Baru masuk",
   thinking: "Lagi dipikirkan",
@@ -15,6 +21,503 @@ let searchQuery = "";
 let ideas = loadIdeas();
 let deferredInstallPrompt = null;
 let splashTimer;
+let cloudSession = null;
+let usingCloudIdeas = false;
+let isSignUpMode = false;
+let recoveryAccessToken = "";
+
+function isSupabaseConfigured() {
+  if (!SUPABASE_URL || !SUPABASE_API_KEY) return false;
+  try {
+    const url = new URL(SUPABASE_URL);
+    return url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch (error) {
+    return false;
+  }
+}
+
+function accountMessage(message, type) {
+  const element = document.querySelector("#account-message");
+  element.textContent = message;
+  element.classList.toggle("is-error", type === "error");
+  element.classList.toggle("is-success", type === "success");
+}
+
+function authErrorMessage(payload, status) {
+  const message = payload && typeof payload === "object"
+    ? payload.msg || payload.message || payload.error_description || payload.error
+    : "";
+  if (typeof message === "string" && message) return message;
+  return `Permintaan ke Supabase gagal (HTTP ${status}).`;
+}
+
+async function supabaseRequest(path, options) {
+  const requestOptions = options || {};
+  const headers = {
+    apikey: SUPABASE_API_KEY,
+    Accept: "application/json",
+    ...requestOptions.headers,
+  };
+  if (requestOptions.accessToken) {
+    headers.Authorization = `Bearer ${requestOptions.accessToken}`;
+  }
+  if (requestOptions.body !== undefined) headers["Content-Type"] = "application/json";
+
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}${path}`, {
+      method: requestOptions.method || "GET",
+      headers,
+      body: requestOptions.body === undefined ? undefined : JSON.stringify(requestOptions.body),
+    });
+  } catch (error) {
+    throw new Error("Tidak bisa terhubung ke Supabase. Periksa koneksi internet dan pengaturan CORS proyek.");
+  }
+
+  const responseText = await response.text();
+  let payload = null;
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch (error) {
+      throw new Error(`Supabase mengirim respons yang tidak dapat dibaca (HTTP ${response.status}).`);
+    }
+  }
+  if (!response.ok) {
+    const error = new Error(authErrorMessage(payload, response.status));
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+function loadAuthSession() {
+  try {
+    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!stored) return null;
+    const session = JSON.parse(stored);
+    if (!session || typeof session.access_token !== "string" || typeof session.refresh_token !== "string"
+      || !session.user || typeof session.user.id !== "string") {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
+    return session;
+  } catch (error) {
+    console.error("Sela auth session could not be read.", error);
+    return null;
+  }
+}
+
+function storeAuthSession(session) {
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+    cloudSession = session;
+    return true;
+  } catch (error) {
+    accountMessage("Sesi akun tidak bisa disimpan di browser ini. Periksa izin penyimpanan lalu coba lagi.", "error");
+    return false;
+  }
+}
+
+function clearAuthSession() {
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (error) {
+    console.error("Sela auth session could not be cleared.", error);
+  }
+  cloudSession = null;
+  usingCloudIdeas = false;
+}
+
+async function getValidAccessToken() {
+  if (!cloudSession) cloudSession = loadAuthSession();
+  if (!cloudSession) throw new Error("Sesi akun sudah berakhir. Silakan masuk kembali.");
+
+  const expiresAt = Number(cloudSession.expires_at || 0);
+  if (expiresAt > Math.floor(Date.now() / 1000) + 60) return cloudSession.access_token;
+
+  const refreshed = await supabaseRequest("/auth/v1/token?grant_type=refresh_token", {
+    method: "POST",
+    body: { refresh_token: cloudSession.refresh_token },
+  });
+  if (!refreshed || typeof refreshed.access_token !== "string" || typeof refreshed.refresh_token !== "string") {
+    clearAuthSession();
+    throw new Error("Sesi tidak dapat diperbarui. Silakan masuk kembali.");
+  }
+  const nextSession = {
+    ...refreshed,
+    expires_at: Math.floor(Date.now() / 1000) + Number(refreshed.expires_in || 3600),
+  };
+  if (!storeAuthSession(nextSession)) throw new Error("Sesi akun tidak tersimpan.");
+  return nextSession.access_token;
+}
+
+function toIdeaRecord(idea, userId) {
+  return {
+    id: idea.id,
+    user_id: userId,
+    title: idea.title,
+    note: idea.note,
+    category: idea.category,
+    status: idea.status,
+    problem: idea.problem,
+    audience: idea.audience,
+    next_step: idea.nextStep,
+    created_at: idea.createdAt,
+  };
+}
+
+function fromIdeaRecord(record) {
+  return {
+    id: record.id,
+    title: record.title,
+    note: record.note,
+    category: record.category,
+    status: record.status,
+    problem: record.problem,
+    audience: record.audience,
+    nextStep: record.next_step,
+    createdAt: record.created_at,
+  };
+}
+
+async function fetchCloudIdeas() {
+  const accessToken = await getValidAccessToken();
+  const records = await supabaseRequest(
+    "/rest/v1/ideas?select=id,title,note,category,status,problem,audience,next_step,created_at&order=created_at.desc",
+    { accessToken },
+  );
+  if (!Array.isArray(records) || !records.every(isValidIdeaRecord)) {
+    throw new Error("Data ide dari database tidak sesuai format. Data lokal tetap aman.");
+  }
+  return records.map(fromIdeaRecord);
+}
+
+function isValidIdeaRecord(record) {
+  return record !== null
+    && typeof record === "object"
+    && typeof record.id === "string"
+    && typeof record.title === "string"
+    && typeof record.note === "string"
+    && typeof record.category === "string"
+    && ["inbox", "thinking", "saved"].includes(record.status)
+    && typeof record.problem === "string"
+    && typeof record.audience === "string"
+    && typeof record.next_step === "string"
+    && typeof record.created_at === "string";
+}
+
+function sameIdea(first, second) {
+  return first.title === second.title
+    && first.note === second.note
+    && first.category === second.category
+    && first.status === second.status
+    && first.problem === second.problem
+    && first.audience === second.audience
+    && first.nextStep === second.nextStep
+    && first.createdAt === second.createdAt;
+}
+
+async function persistCloudChanges(previousIdeas, nextIdeas) {
+  const accessToken = await getValidAccessToken();
+  const previousById = new Map(previousIdeas.map((idea) => [idea.id, idea]));
+  const nextById = new Map(nextIdeas.map((idea) => [idea.id, idea]));
+  const changedIdeas = nextIdeas.filter((idea) => {
+    const previous = previousById.get(idea.id);
+    return !previous || !sameIdea(previous, idea);
+  });
+
+  if (changedIdeas.length > 0) {
+    await supabaseRequest("/rest/v1/ideas?on_conflict=id", {
+      method: "POST",
+      accessToken,
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: changedIdeas.map((idea) => toIdeaRecord(idea, cloudSession.user.id)),
+    });
+  }
+
+  const deletedIds = previousIdeas
+    .filter((idea) => !nextById.has(idea.id))
+    .map((idea) => idea.id);
+  for (const id of deletedIds) {
+    await supabaseRequest(`/rest/v1/ideas?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      accessToken,
+      headers: { Prefer: "return=minimal" },
+    });
+  }
+}
+
+function localIdeasForImport() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === null) return [];
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed) || !parsed.every(isValidIdea)) {
+      throw new Error("Ide lokal tidak valid. Data lokal tidak diubah atau diunggah.");
+    }
+    return parsed;
+  } catch (error) {
+    throw new Error(error instanceof SyntaxError
+      ? "Ide lokal tidak bisa dibaca. Data lokal tidak diubah atau diunggah."
+      : error.message);
+  }
+}
+
+async function importLocalIdeas() {
+  const localIdeas = localIdeasForImport();
+  if (localIdeas.length === 0) {
+    accountMessage("Tidak ada ide tersimpan di browser ini untuk digabung.", "success");
+    return;
+  }
+  const alreadySyncedIds = new Set(ideas.map((idea) => idea.id));
+  const newLocalIdeas = localIdeas.filter((idea) => !alreadySyncedIds.has(idea.id));
+  if (newLocalIdeas.length === 0) {
+    accountMessage("Semua ide lokal sudah ada di akun. Tidak ada perubahan yang dibuat.", "success");
+    updateAccountUI();
+    return;
+  }
+  const accessToken = await getValidAccessToken();
+  await supabaseRequest("/rest/v1/ideas?on_conflict=id", {
+    method: "POST",
+    accessToken,
+    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: newLocalIdeas.map((idea) => toIdeaRecord({
+      ...idea,
+      id: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idea.id)
+        ? idea.id
+        : makeId(),
+    }, cloudSession.user.id)),
+  });
+  ideas = await fetchCloudIdeas();
+  usingCloudIdeas = true;
+  updateAccountUI();
+  render();
+  accountMessage(`${newLocalIdeas.length} ide lokal baru berhasil digabung ke akun. Ide akun yang sudah ada tidak ditimpa.`, "success");
+}
+
+function updateAccountUI() {
+  const signedIn = Boolean(cloudSession && cloudSession.user);
+  const trigger = document.querySelector("#account-trigger");
+  const badge = document.querySelector("#privacy-badge");
+  trigger.textContent = signedIn ? "Akun" : "Masuk / sinkronisasi";
+  trigger.setAttribute("aria-label", signedIn ? "Pengaturan akun dan sinkronisasi" : "Masuk atau buat akun untuk sinkronisasi");
+  badge.innerHTML = signedIn
+    ? '<span aria-hidden="true">●</span> Tersinkron'
+    : '<span aria-hidden="true">●</span> Tersimpan lokal';
+  document.querySelector("#auth-form").hidden = signedIn || Boolean(recoveryAccessToken);
+  document.querySelector("#recovery-form").hidden = !recoveryAccessToken;
+  document.querySelector("#signed-in-panel").hidden = !signedIn || Boolean(recoveryAccessToken);
+  document.querySelector("#account-description").hidden = signedIn && !recoveryAccessToken;
+
+  if (signedIn) {
+    document.querySelector("#signed-in-email").textContent = cloudSession.user.email || "Akun Sela";
+    const migrationCard = document.querySelector("#migration-card");
+    const importButton = document.querySelector("#import-local-ideas");
+    try {
+      const localIdeas = localIdeasForImport();
+      const cloudIdeaIds = new Set(ideas.map((idea) => idea.id));
+      const pendingIdeas = localIdeas.filter((idea) => !cloudIdeaIds.has(idea.id));
+      migrationCard.hidden = pendingIdeas.length === 0;
+      importButton.disabled = false;
+      document.querySelector("#migration-description").textContent =
+        `Ada ${pendingIdeas.length} ide lokal yang belum ada di akun cloud. Ide akun yang sudah ada tidak akan ditimpa.`;
+    } catch (error) {
+      migrationCard.hidden = false;
+      importButton.disabled = true;
+      document.querySelector("#migration-description").textContent = error.message;
+    }
+  }
+}
+
+function sessionFromResponse(response) {
+  if (!response || typeof response.access_token !== "string"
+    || typeof response.refresh_token !== "string" || !response.user
+    || typeof response.user.id !== "string") {
+    throw new Error("Supabase tidak mengirim sesi akun yang lengkap.");
+  }
+  return {
+    ...response,
+    expires_at: Math.floor(Date.now() / 1000) + Number(response.expires_in || 3600),
+  };
+}
+
+async function activateCloudSession(session) {
+  if (!storeAuthSession(session)) throw new Error("Sesi akun tidak tersimpan.");
+  try {
+    const cloudIdeas = await fetchCloudIdeas();
+    cloudSession = session;
+    ideas = cloudIdeas;
+    usingCloudIdeas = true;
+    updateAccountUI();
+    render();
+  } catch (error) {
+    cloudSession = null;
+    usingCloudIdeas = false;
+    updateAccountUI();
+    throw error;
+  }
+}
+
+async function restoreCloudSession() {
+  if (!isSupabaseConfigured()) return;
+  const savedSession = loadAuthSession();
+  if (!savedSession) return;
+  cloudSession = savedSession;
+  try {
+    const cloudIdeas = await fetchCloudIdeas();
+    ideas = cloudIdeas;
+    usingCloudIdeas = true;
+    updateAccountUI();
+    render();
+  } catch (error) {
+    if (error.status === 400 || error.status === 401) {
+      clearAuthSession();
+    } else {
+      cloudSession = null;
+      usingCloudIdeas = false;
+    }
+    ideas = loadIdeas();
+    updateAccountUI();
+    render();
+    showStatus(`Sinkronisasi akun tidak berhasil; ide lokal tetap digunakan. ${error.message}`);
+  }
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  if (!isSupabaseConfigured()) {
+    accountMessage("Supabase belum dikonfigurasi. Isi URL proyek dan publishable/anon key di supabase-config.js, lalu deploy ulang.", "error");
+    return;
+  }
+
+  const email = document.querySelector("#auth-email").value.trim();
+  const password = document.querySelector("#auth-password").value;
+  const submitButton = document.querySelector("#auth-submit");
+  submitButton.disabled = true;
+  accountMessage(isSignUpMode ? "Membuat akun..." : "Memeriksa akun...", "");
+  try {
+    const response = await supabaseRequest(
+      isSignUpMode ? "/auth/v1/signup" : "/auth/v1/token?grant_type=password",
+      { method: "POST", body: { email, password } },
+    );
+    if (!response || typeof response.access_token !== "string") {
+      if (isSignUpMode) {
+        isSignUpMode = false;
+        updateAuthMode();
+        accountMessage("Akun dibuat. Periksa email untuk verifikasi, lalu masuk setelah email dikonfirmasi.", "success");
+        return;
+      }
+      throw new Error("Login berhasil diproses tetapi sesi tidak diterima. Periksa pengaturan autentikasi Supabase.");
+    }
+    await activateCloudSession(sessionFromResponse(response));
+    document.querySelector("#auth-form").reset();
+    accountMessage("Berhasil masuk. Ide akunmu sekarang tersinkron.", "success");
+  } catch (error) {
+    accountMessage(error.message, "error");
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+function updateAuthMode() {
+  document.querySelector("#auth-submit").textContent = isSignUpMode ? "Buat akun" : "Masuk";
+  document.querySelector("#toggle-auth-mode").textContent = isSignUpMode
+    ? "Sudah punya akun? Masuk"
+    : "Belum punya akun? Daftar";
+  document.querySelector("#auth-password").autocomplete = isSignUpMode ? "new-password" : "current-password";
+  document.querySelector("#reset-password").hidden = isSignUpMode;
+}
+
+async function requestPasswordReset() {
+  if (!isSupabaseConfigured()) {
+    accountMessage("Supabase belum dikonfigurasi. Isi URL proyek dan publishable/anon key di supabase-config.js, lalu deploy ulang.", "error");
+    return;
+  }
+  const email = document.querySelector("#auth-email").value.trim();
+  if (!email) {
+    document.querySelector("#auth-email").focus();
+    accountMessage("Masukkan email akun terlebih dahulu.", "error");
+    return;
+  }
+  try {
+    const redirectTo = encodeURIComponent(window.location.href.split("#")[0]);
+    await supabaseRequest(`/auth/v1/recover?redirect_to=${redirectTo}`, {
+      method: "POST",
+      body: { email },
+    });
+    accountMessage("Jika email terdaftar, tautan untuk mengatur ulang password akan dikirim.", "success");
+  } catch (error) {
+    accountMessage(error.message, "error");
+  }
+}
+
+function startPasswordRecovery() {
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  if (hash.get("type") !== "recovery") return;
+  recoveryAccessToken = hash.get("access_token") || "";
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  if (!document.querySelector("#onboarding-overlay").hidden) finishOnboarding();
+  updateAccountUI();
+  accountDialog.showModal();
+  if (recoveryAccessToken) {
+    accountMessage("Masukkan password baru untuk akunmu.", "");
+  } else {
+    accountMessage("Tautan pemulihan tidak lengkap. Minta tautan baru melalui menu lupa password.", "error");
+  }
+}
+
+async function submitPasswordRecovery(event) {
+  event.preventDefault();
+  if (!recoveryAccessToken) {
+    accountMessage("Tautan pemulihan tidak tersedia. Minta tautan baru melalui menu lupa password.", "error");
+    return;
+  }
+  const password = document.querySelector("#recovery-password").value;
+  const confirmation = document.querySelector("#recovery-password-confirm").value;
+  if (password !== confirmation) {
+    accountMessage("Kedua password belum sama.", "error");
+    document.querySelector("#recovery-password-confirm").focus();
+    return;
+  }
+  const button = document.querySelector("#recovery-submit");
+  button.disabled = true;
+  try {
+    await supabaseRequest("/auth/v1/user", {
+      method: "PUT",
+      accessToken: recoveryAccessToken,
+      body: { password },
+    });
+    recoveryAccessToken = "";
+    document.querySelector("#recovery-form").reset();
+    updateAccountUI();
+    accountMessage("Password berhasil diperbarui. Silakan masuk dengan password baru.", "success");
+  } catch (error) {
+    accountMessage(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function signOut() {
+  let remoteError = null;
+  if (cloudSession && isSupabaseConfigured()) {
+    try {
+      const accessToken = await getValidAccessToken();
+      await supabaseRequest("/auth/v1/logout", { method: "POST", accessToken });
+    } catch (error) {
+      remoteError = error;
+    }
+  }
+  clearAuthSession();
+  ideas = loadIdeas();
+  updateAccountUI();
+  render();
+  accountMessage(remoteError
+    ? `Keluar di perangkat ini berhasil, tetapi Supabase tidak dapat mengakhiri sesi di server: ${remoteError.message}`
+    : "Kamu sudah keluar. Ide di perangkat ini tetap tersimpan lokal.",
+  remoteError ? "error" : "success");
+}
 
 function showStatus(message) {
   statusMessage.textContent = message;
@@ -24,7 +527,10 @@ function makeId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.random() * 16 | 0;
+    return (character === "x" ? random : (random & 3 | 8)).toString(16);
+  });
 }
 
 function sampleIdeas() {
@@ -96,7 +602,20 @@ function loadIdeas() {
   }
 }
 
-function saveIdeas(nextIdeas, message) {
+async function saveIdeas(nextIdeas, message) {
+  if (cloudSession && usingCloudIdeas) {
+    try {
+      await persistCloudChanges(ideas, nextIdeas);
+    } catch (error) {
+      showStatus(`Perubahan belum tersinkron: ${error.message}`);
+      return false;
+    }
+    ideas = nextIdeas;
+    showStatus(message);
+    render();
+    return true;
+  }
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(nextIdeas));
   } catch (error) {
@@ -193,8 +712,9 @@ function openIdea(id) {
   document.querySelector("#detail-idea-title").focus();
 }
 
-document.querySelector("#quick-form").addEventListener("submit", (event) => {
+document.querySelector("#quick-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const titleField = document.querySelector("#quick-title");
   const title = titleField.value.trim();
   if (!title) {
@@ -212,13 +732,19 @@ document.querySelector("#quick-form").addEventListener("submit", (event) => {
     nextStep: "",
     createdAt: new Date().toISOString(),
   };
-  if (saveIdeas([idea, ...ideas], "Ide tersimpan. Kamu bisa memikirkannya lagi kapan saja.")) {
-    event.currentTarget.reset();
+  const submitButton = form.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  const saved = await saveIdeas([idea, ...ideas], cloudSession && usingCloudIdeas
+    ? "Ide tersimpan dan tersinkron."
+    : "Ide tersimpan. Kamu bisa memikirkannya lagi kapan saja.");
+  submitButton.disabled = false;
+  if (saved) {
+    form.reset();
     titleField.focus();
   }
 });
 
-document.querySelector("#detail-form").addEventListener("submit", (event) => {
+document.querySelector("#detail-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const id = document.querySelector("#detail-id").value;
   const title = document.querySelector("#detail-idea-title").value.trim();
@@ -237,7 +763,12 @@ document.querySelector("#detail-form").addEventListener("submit", (event) => {
     audience,
     nextStep,
   };
-  if (saveIdeas(ideas.map((idea) => idea.id === id ? nextIdea : idea), "Perkembangan ide berhasil disimpan.")) {
+  const submitButton = event.currentTarget.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  const saved = await saveIdeas(ideas.map((idea) => idea.id === id ? nextIdea : idea),
+    cloudSession && usingCloudIdeas ? "Perkembangan ide berhasil disinkronkan." : "Perkembangan ide berhasil disimpan.");
+  submitButton.disabled = false;
+  if (saved) {
     dialog.close();
   }
 });
@@ -252,9 +783,14 @@ dialog.addEventListener("click", (event) => {
   if (event.target === dialog) closeDialog();
 });
 
-document.querySelector("#delete-idea").addEventListener("click", () => {
+document.querySelector("#delete-idea").addEventListener("click", async (event) => {
   const id = document.querySelector("#detail-id").value;
-  if (saveIdeas(ideas.filter((idea) => idea.id !== id), "Ide berhasil dihapus.")) closeDialog();
+  const button = event.currentTarget;
+  button.disabled = true;
+  const saved = await saveIdeas(ideas.filter((idea) => idea.id !== id),
+    cloudSession && usingCloudIdeas ? "Ide dihapus dari akun." : "Ide berhasil dihapus.");
+  button.disabled = false;
+  if (saved) closeDialog();
 });
 
 ideaGrid.addEventListener("click", (event) => {
@@ -450,6 +986,47 @@ document.querySelector("#continue-to-app").addEventListener("click", finishOnboa
 document.querySelector("#install-app").addEventListener("click", promptInstall);
 document.querySelector("#open-install-guide").addEventListener("click", showInstallGuide);
 
+const accountDialog = document.querySelector("#account-dialog");
+document.querySelector("#account-trigger").addEventListener("click", () => {
+  updateAccountUI();
+  accountDialog.showModal();
+  if (!cloudSession && isSupabaseConfigured()) {
+    accountMessage("Masuk atau buat akun untuk mulai menyinkronkan ide.", "");
+  } else if (!isSupabaseConfigured()) {
+    accountMessage("Akun cloud belum aktif. Pengaturan Supabase perlu dilengkapi terlebih dahulu.", "");
+  }
+});
+document.querySelector("#close-account").addEventListener("click", () => accountDialog.close());
+accountDialog.addEventListener("click", (event) => {
+  if (event.target === accountDialog) accountDialog.close();
+});
+document.querySelector("#auth-form").addEventListener("submit", submitAuth);
+document.querySelector("#recovery-form").addEventListener("submit", submitPasswordRecovery);
+document.querySelector("#toggle-auth-mode").addEventListener("click", () => {
+  isSignUpMode = !isSignUpMode;
+  updateAuthMode();
+  accountMessage("", "");
+});
+document.querySelector("#reset-password").addEventListener("click", requestPasswordReset);
+document.querySelector("#import-local-ideas").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  accountMessage("Menggabungkan ide lokal...", "");
+  try {
+    await importLocalIdeas();
+  } catch (error) {
+    accountMessage(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+document.querySelector("#sign-out").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  await signOut();
+  button.disabled = false;
+});
+
 if ("serviceWorker" in navigator
   && (window.location.protocol === "https:"
     || window.location.hostname === "localhost"
@@ -462,4 +1039,8 @@ if ("serviceWorker" in navigator
 }
 
 startInstallExperience();
+updateAuthMode();
+updateAccountUI();
 render();
+startPasswordRecovery();
+restoreCloudSession();

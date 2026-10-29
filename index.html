@@ -15,6 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script src="supabase-config.js"></script>
     <script>
       if (new URLSearchParams(window.location.search).get("layout") !== "current") {
         const variantStylesheet = document.createElement("link");
@@ -61,8 +62,9 @@
           <span>sela</span>
         </a>
         <p class="topbar-note">Ruang untuk pikiran yang datang tiba-tiba.</p>
+        <button class="account-trigger" id="account-trigger" type="button">Masuk / sinkronisasi</button>
         <button class="install-trigger" id="open-install-guide" type="button">＋ Pasang Sela</button>
-        <span class="private-badge"><span aria-hidden="true">●</span> Pribadi</span>
+        <span class="private-badge" id="privacy-badge"><span aria-hidden="true">●</span> Tersimpan lokal</span>
       </header>
 
       <main>
@@ -177,6 +179,47 @@
           <button class="button button-primary" type="submit">Simpan perubahan</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="account-dialog" id="account-dialog" aria-labelledby="account-title">
+      <section class="account-panel">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">AKUN DAN SINKRONISASI</p><h2 id="account-title">Ide kamu, lintas perangkat.</h2></div>
+          <button class="dialog-close" id="close-account" type="button" aria-label="Tutup">×</button>
+        </div>
+        <p class="account-description" id="account-description">Masuk untuk menyimpan ide di akunmu dan membukanya dari perangkat lain.</p>
+        <div class="account-message" id="account-message" role="status" aria-live="polite"></div>
+        <form id="auth-form">
+          <label class="field-label" for="auth-email">Email</label>
+          <input class="form-control" id="auth-email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="nama@email.com" required>
+          <label class="field-label" for="auth-password">Password</label>
+          <input class="form-control" id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="Minimal 8 karakter" required>
+          <button class="button button-primary account-submit" id="auth-submit" type="submit">Masuk</button>
+          <div class="auth-secondary">
+            <button class="text-button" id="toggle-auth-mode" type="button">Belum punya akun? Daftar</button>
+            <button class="text-button" id="reset-password" type="button">Lupa password?</button>
+          </div>
+        </form>
+        <form id="recovery-form" hidden>
+          <label class="field-label" for="recovery-password">Password baru</label>
+          <input class="form-control" id="recovery-password" type="password" autocomplete="new-password" minlength="8" placeholder="Minimal 8 karakter" required>
+          <label class="field-label" for="recovery-password-confirm">Ulangi password baru</label>
+          <input class="form-control" id="recovery-password-confirm" type="password" autocomplete="new-password" minlength="8" placeholder="Ketik ulang password baru" required>
+          <button class="button button-primary account-submit" id="recovery-submit" type="submit">Simpan password baru</button>
+        </form>
+        <section class="signed-in-panel" id="signed-in-panel" hidden>
+          <div class="signed-in-account"><span class="account-avatar" aria-hidden="true">✦</span><div><span class="signed-in-label">Masuk sebagai</span><strong id="signed-in-email"></strong></div></div>
+          <div class="migration-card" id="migration-card" hidden>
+            <strong>Ide lama masih ada di browser ini</strong>
+            <p id="migration-description"></p>
+            <p>Ide lokal hanya akan digabung ke akun jika kamu menekan tombol berikut.</p>
+            <button class="button button-outline" id="import-local-ideas" type="button">Gabungkan ide lokal ke akun</button>
+          </div>
+          <p class="cloud-note">Ide akun dimuat dari Supabase. Saat keluar, Sela kembali ke ide lokal di browser ini.</p>
+          <button class="button button-outline account-submit" id="sign-out" type="button">Keluar dari akun</button>
+        </section>
+        <p class="account-footnote">Jangan gunakan perangkat bersama untuk menyimpan ide pribadi. Keluar dari akun setelah selesai.</p>
+      </section>
     </dialog>
   </body>
 </html>

@@ -169,6 +169,34 @@ textarea.prompt-input { height: 49px; padding: 8px; resize: vertical; }
 .onboarding-footnote { margin: 12px 0 0; color: #8792a3; font-size: 9px; text-align: center; }
 .install-trigger { min-height: 31px; padding: 0 10px; border: 1px solid #dfe4ed; border-radius: 7px; background: #fff; color: #315fe8; font-size: 9px; font-weight: 700; }
 .install-trigger:hover { border-color: #9db1f5; background: #f4f6ff; }
+.account-trigger { min-height: 31px; padding: 0 10px; border: 1px solid #315fe8; border-radius: 7px; background: #315fe8; color: #fff; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.account-trigger:hover { background: #254cc1; }
+.button:disabled, .account-trigger:disabled, .install-trigger:disabled { cursor: wait; opacity: .6; }
+.account-dialog { width: min(440px, calc(100% - 28px)); max-height: min(90vh, 760px); padding: 0; overflow: auto; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 25px 80px rgba(40, 46, 37, .22); }
+.account-dialog::backdrop { background: rgba(25, 36, 57, .58); backdrop-filter: blur(2px); }
+.account-panel { padding: 23px; }
+.account-panel .dialog-heading { margin-bottom: 10px; }
+.account-panel .dialog-heading h2 { max-width: 325px; font-size: 18px; }
+.account-description { margin: 0 0 15px; color: #687487; font-size: 11px; line-height: 1.6; }
+.account-message { min-height: 0; margin: 0 0 12px; color: #315fe8; font-size: 10px; line-height: 1.55; }
+.account-message:empty { display: none; }
+.account-message.is-error { color: #a63e2e; }
+.account-message.is-success { color: #28704b; }
+.account-submit { width: 100%; min-height: 39px; margin: 2px 0 8px; font-size: 10px; }
+.auth-secondary { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.text-button { padding: 3px 0; border: 0; background: transparent; color: #315fe8; font-size: 9px; text-align: left; }
+.text-button:hover { color: #254cc1; text-decoration: underline; }
+.signed-in-account { display: flex; align-items: center; gap: 10px; margin: 7px 0 17px; }
+.account-avatar { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 12px; background: #e3eaff; color: #315fe8; font-size: 16px; }
+.signed-in-account div { display: grid; gap: 3px; min-width: 0; }
+.signed-in-label { color: #687487; font-size: 9px; }
+.signed-in-account strong { overflow-wrap: anywhere; color: #202a3a; font-size: 11px; }
+.migration-card { margin-bottom: 13px; padding: 13px; border: 1px solid #dce4f7; border-radius: 9px; background: #f5f7fc; }
+.migration-card > strong { color: #34425a; font: 700 10px "Manrope", sans-serif; }
+.migration-card p { margin: 7px 0 0; color: #687487; font-size: 9px; line-height: 1.55; }
+.migration-card .button { min-height: 34px; margin-top: 11px; font-size: 9px; }
+.cloud-note { margin: 0 0 12px; color: #687487; font-size: 9px; line-height: 1.55; }
+.account-footnote { margin: 15px 0 0; color: #8792a3; font-size: 9px; line-height: 1.55; }
 body.is-onboarding { overflow: hidden; }
 @keyframes splash-appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes guide-appear { from { opacity: 0; transform: translateY(9px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -197,9 +225,13 @@ body.is-onboarding { overflow: hidden; }
 
 @media (max-width: 420px) {
   .app-shell { width: calc(100% - 22px); }
-  .topbar { gap: 7px; }
-  .install-trigger { min-height: 29px; padding: 0 7px; font-size: 8px; }
-  .private-badge { gap: 4px; margin-left: 0; padding: 6px 7px; font-size: 8px; }
+  .topbar { gap: 5px; }
+  .install-trigger { min-height: 29px; margin-left: auto; padding: 0 6px; font-size: 8px; }
+  .account-trigger { width: 38px; min-height: 29px; overflow: hidden; padding: 0; font-size: 0; }
+  .account-trigger::after { content: "Masuk"; font-size: 8px; }
+  .account-trigger[aria-label^="Pengaturan"]::after { content: "Akun"; }
+  .private-badge { gap: 3px; margin-left: 0; padding: 6px 5px; font-size: 8px; white-space: nowrap; }
+  .private-badge span { font-size: 7px; }
   .hero { min-height: 205px; padding: 25px 18px; }
   .hero-art { width: 95px; flex-basis: 95px; margin-right: -35px; transform: scale(.68); }
   h1 { font-size: 32px; }
@@ -213,6 +245,8 @@ body.is-onboarding { overflow: hidden; }
   .filter-tabs { gap: 2px; }
   .filter-tab { padding: 7px 8px; font-size: 9px; }
   .detail-form { padding: 18px; }
+  .account-panel { padding: 19px; }
+  .auth-secondary { flex-direction: column; gap: 4px; }
   .dialog-actions .button { padding: 0 9px; font-size: 9px; }
   .onboarding-overlay { padding: 12px; }
   .splash-screen, .onboarding-guide { min-height: calc(100dvh - 24px); }
