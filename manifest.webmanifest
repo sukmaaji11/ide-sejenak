@@ -1,0 +1,33 @@
+{
+  "id": "./index.html",
+  "name": "Sela — ruang untuk ide",
+  "short_name": "Sela",
+  "description": "Tangkap ide selagi muncul, kembangkan saat waktunya tepat.",
+  "lang": "id",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1d2b43",
+  "theme_color": "#1d2b43",
+  "icons": [
+    {
+      "src": "./icons/sela-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/sela-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/sela-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f2f4f8">
+    <title>Perbandingan posisi input — Sela</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f2f4f8; color: #202a3a; font-family: "Segoe UI", sans-serif; }
+      header { position: sticky; z-index: 1; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px max(20px, calc((100% - 1120px) / 2)); border-bottom: 1px solid #dfe4ed; background: rgba(255,255,255,.96); }
+      .heading { display: flex; align-items: center; gap: 12px; }
+      .mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px 11px 11px 4px; background: #315fe8; color: white; font-weight: 800; }
+      h1 { margin: 0; font-size: 15px; }
+      .caption { margin: 3px 0 0; color: #687487; font-size: 11px; }
+      .controls { display: flex; flex-wrap: wrap; gap: 7px; }
+      button, a { display: inline-flex; min-height: 35px; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid #dfe4ed; border-radius: 7px; background: white; color: #34425a; font-size: 11px; font-weight: 650; text-decoration: none; cursor: pointer; }
+      button[aria-pressed="true"] { border-color: #315fe8; background: #315fe8; color: white; }
+      main { width: min(1120px, calc(100% - 32px)); margin: 20px auto; }
+      .frame-wrap { overflow: hidden; border: 1px solid #dfe4ed; border-radius: 12px; background: white; box-shadow: 0 10px 28px rgba(28,41,63,.07); }
+      .frame-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 15px; border-bottom: 1px solid #e8ebf1; }
+      .frame-label strong { font-size: 12px; }
+      .frame-label span { color: #687487; font-size: 10px; }
+      iframe { display: block; width: 100%; height: min(860px, calc(100vh - 135px)); min-height: 600px; border: 0; background: #f2f4f8; }
+      @media (max-width: 650px) {
+        header { align-items: flex-start; flex-direction: column; padding: 12px 14px; }
+        .controls { width: 100%; }
+        .controls button, .controls a { flex: 1; padding: 0 7px; font-size: 10px; }
+        main { width: calc(100% - 20px); margin-top: 12px; }
+        iframe { height: calc(100vh - 185px); min-height: 580px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="heading">
+        <span class="mark" aria-hidden="true">s.</span>
+        <div>
+          <h1>Bandingkan posisi kartu input</h1>
+          <p class="caption">Versi saat ini tetap aman—alternatif hanya menggeser kartu sedikit ke atas.</p>
+        </div>
+      </div>
+      <nav class="controls" aria-label="Pilih versi">
+        <button type="button" data-layout="current" aria-pressed="false">Versi sebelumnya</button>
+        <button type="button" data-layout="raised" aria-pressed="true">Versi terbaru</button>
+        <a href="index.html" target="_blank" rel="noopener">Buka versi asli ↗</a>
+      </nav>
+    </header>
+    <main>
+      <section class="frame-wrap" aria-label="Pratinjau Sela">
+        <div class="frame-label">
+          <strong id="preview-label">Versi saat ini</strong>
+          <span id="preview-description">Posisi kartu input yang sekarang</span>
+        </div>
+        <iframe id="preview" title="Pratinjau aplikasi Sela"></iframe>
+      </section>
+    </main>
+    <script>
+      const preview = document.querySelector("#preview");
+      const label = document.querySelector("#preview-label");
+      const description = document.querySelector("#preview-description");
+      const buttons = document.querySelectorAll("[data-layout]");
+      const variants = {
+        current: {
+          src: "index.html?layout=current",
+          title: "Versi sebelumnya",
+          description: "Posisi kartu input sebelum digeser",
+        },
+        raised: {
+          src: "index.html",
+          title: "Versi terbaru",
+          description: "Kartu input naik 10 px",
+        },
+      };
+
+      function selectLayout(name) {
+        const variant = variants[name];
+        if (!variant) return;
+        preview.src = variant.src;
+        label.textContent = variant.title;
+        description.textContent = variant.description;
+        buttons.forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.layout === name));
+        });
+      }
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => selectLayout(button.dataset.layout));
+      });
+      selectLayout("raised");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1d2b43">
+    <meta name="description" content="Tangkap ide selagi muncul, kembangkan saat waktunya tepat.">
+    <title>Sela — tangkap dulu, pikirkan nanti</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/sela-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="icons/sela-180.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      if (new URLSearchParams(window.location.search).get("layout") !== "current") {
+        const variantStylesheet = document.createElement("link");
+        variantStylesheet.rel = "stylesheet";
+        variantStylesheet.href = "styles-raised.css";
+        document.head.append(variantStylesheet);
+      }
+    </script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="onboarding-overlay" id="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+      <section class="splash-screen" id="splash-screen">
+        <div class="splash-brand" aria-hidden="true">s.</div>
+        <p class="splash-wordmark">sela</p>
+        <p class="splash-tagline">Tangkap dulu. Pikirkan nanti.</p>
+        <span class="splash-loader" aria-hidden="true"></span>
+        <button class="splash-skip" id="skip-splash" type="button">Lewati intro</button>
+      </section>
+      <section class="onboarding-guide" id="onboarding-guide" hidden>
+        <div class="onboarding-card">
+          <button class="onboarding-close" id="close-onboarding" type="button" aria-label="Lewati panduan">×</button>
+          <div class="onboarding-mark" aria-hidden="true">s.</div>
+          <p class="eyebrow">SELAMAT DATANG DI SELA</p>
+          <h1 id="onboarding-title">Biar Sela selalu dekat.</h1>
+          <p class="onboarding-copy">Tambahkan Sela ke layar utama supaya ruang idemu gampang dibuka kapan pun inspirasi datang.</p>
+          <div class="install-instructions" id="install-instructions">
+            <p class="install-instructions-title" id="install-instructions-title">Cara menambahkan</p>
+            <ol id="install-instructions-list"></ol>
+          </div>
+          <p class="install-requirement" id="install-requirement" hidden>Sela perlu di-host di alamat HTTPS agar bisa dipasang. Ikuti langkah berikut setelah Sela tersedia online.</p>
+          <button class="button button-primary install-action" id="install-app" type="button" hidden>Pasang Sela</button>
+          <p class="install-feedback" id="install-feedback" role="status" aria-live="polite"></p>
+          <button class="button button-primary onboarding-continue" id="continue-to-app" type="button">Mengerti, mulai pakai Sela</button>
+          <p class="onboarding-footnote">Panduan otomatis hanya muncul sekali. Kamu bisa membukanya lagi lewat tombol Pasang Sela.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Sela, beranda">
+          <span class="brand-mark" aria-hidden="true">s.</span>
+          <span>sela</span>
+        </a>
+        <p class="topbar-note">Ruang untuk pikiran yang datang tiba-tiba.</p>
+        <button class="install-trigger" id="open-install-guide" type="button">＋ Pasang Sela</button>
+        <span class="private-badge"><span aria-hidden="true">●</span> Pribadi</span>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">JANGAN BIARKAN IDE LEWAT</p>
+            <h1>Tangkap dulu.<br><span>Pikirkan nanti.</span></h1>
+            <p class="hero-description">Ide kecil, pemikiran tengah malam, atau sesuatu yang belum selesai—simpan di sini. Kamu bisa kembali saat siap.</p>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <span class="art-orbit orbit-one"></span><span class="art-orbit orbit-two"></span>
+            <span class="art-star star-one">✳</span><span class="art-star star-two">✦</span>
+            <span class="art-note"><span></span><span></span><span></span></span>
+            <span class="art-caption">ide kamu,<br>kapan saja</span>
+          </div>
+        </section>
+
+        <section class="capture-card" aria-labelledby="capture-title">
+          <div class="capture-heading">
+            <div class="capture-icon" aria-hidden="true">✎</div>
+            <div><p class="eyebrow">KOTAK MASUK PIKIRAN</p><h2 id="capture-title">Apa yang lagi kepikiran?</h2></div>
+            <kbd>⌘ ↵</kbd>
+          </div>
+          <form id="quick-form">
+            <label class="visually-hidden" for="quick-title">Judul ide</label>
+            <input id="quick-title" name="title" maxlength="120" placeholder="Tulis idemu di sini..." autocomplete="off" required>
+            <div class="capture-bottom">
+              <label class="context-input">
+                <span aria-hidden="true">↳</span>
+                <span class="visually-hidden">Catatan tambahan</span>
+                <input id="quick-note" name="note" maxlength="500" placeholder="Tambahkan konteks singkat (opsional)">
+              </label>
+              <div class="capture-actions">
+                <label class="category-select-label" for="quick-category">Kategori</label>
+                <select id="quick-category" name="category" aria-label="Kategori ide">
+                  <option value="Personal">Personal</option>
+                  <option value="Kerja">Kerja</option>
+                  <option value="Kreatif">Kreatif</option>
+                  <option value="Belajar">Belajar</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+                <button class="button button-primary" type="submit"><span aria-hidden="true">+</span> Simpan ide</button>
+              </div>
+            </div>
+          </form>
+          <p class="capture-hint">Tidak harus sempurna. Cukup simpan sebelum lupa.</p>
+        </section>
+
+        <section class="ideas-section">
+          <div class="ideas-header">
+            <div>
+              <p class="eyebrow">TUMPUKAN IDE KAMU</p>
+              <h2>Ruang ide <span class="idea-count" id="idea-count">0</span></h2>
+            </div>
+            <label class="search-box">
+              <span aria-hidden="true">⌕</span>
+              <span class="visually-hidden">Cari ide</span>
+              <input id="idea-search" type="search" placeholder="Cari ide...">
+            </label>
+          </div>
+          <div class="idea-toolbar">
+            <div class="filter-tabs" role="group" aria-label="Filter ide">
+              <button type="button" class="filter-tab active" data-filter="all" aria-pressed="true">Semua</button>
+              <button type="button" class="filter-tab" data-filter="inbox" aria-pressed="false">Baru masuk</button>
+              <button type="button" class="filter-tab" data-filter="thinking" aria-pressed="false">Lagi dipikirkan</button>
+              <button type="button" class="filter-tab" data-filter="saved" aria-pressed="false">Selesai dikembangkan</button>
+            </div>
+            <span id="visible-count" class="visible-count">0 ide</span>
+          </div>
+          <div class="idea-grid" id="idea-grid" aria-live="polite"></div>
+          <p class="status-message" id="status-message" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="gentle-reminder">
+          <span class="reminder-spark" aria-hidden="true">✦</span>
+          <div><strong>Ide tidak harus langsung jadi rencana.</strong><p>Simpan saja. Kamu boleh kembali saat pikiran sudah lebih jernih.</p></div>
+          <span class="reminder-doodle" aria-hidden="true">⌁</span>
+        </section>
+      </main>
+      <footer class="footer">sela <span>·</span> Dibuat untuk pikiran yang tidak mau diam.</footer>
+    </div>
+
+    <dialog class="idea-dialog" id="idea-dialog" aria-labelledby="detail-title">
+      <form class="detail-form" id="detail-form">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">KEMBANGKAN PELAN-PELAN</p><h2 id="detail-title">Kembali ke idemu</h2></div>
+          <button class="dialog-close" id="close-dialog" type="button" aria-label="Tutup">×</button>
+        </div>
+        <input id="detail-id" type="hidden">
+        <label class="field-label" for="detail-idea-title">Judul ide</label>
+        <input class="form-control" id="detail-idea-title" maxlength="120" required>
+        <label class="field-label" for="detail-status">Tahap ide</label>
+        <select class="form-control" id="detail-status">
+          <option value="inbox">Baru masuk</option>
+          <option value="thinking">Lagi dipikirkan</option>
+          <option value="saved">Selesai dikembangkan</option>
+        </select>
+        <label class="field-label" for="detail-note">Catatan / konteks</label>
+        <textarea class="form-control textarea" id="detail-note" maxlength="1000" placeholder="Apa yang membuatmu terpikir soal ini?"></textarea>
+        <div class="prompt-card">
+          <p class="prompt-intro">Kalau mau, pikirkan satu-satu. Tidak perlu dijawab semua sekarang.</p>
+          <label class="field-label" for="detail-problem">Masalah atau kebutuhan apa yang terlihat?</label>
+          <textarea class="form-control prompt-input" id="detail-problem" maxlength="500" placeholder="Tuliskan seadanya..."></textarea>
+          <label class="field-label" for="detail-audience">Siapa yang mungkin terbantu?</label>
+          <input class="form-control prompt-input" id="detail-audience" maxlength="200" placeholder="Dirimu, teman, komunitas...">
+          <label class="field-label" for="detail-next">Langkah kecil apa yang bisa dicoba?</label>
+          <textarea class="form-control prompt-input" id="detail-next" maxlength="500" placeholder="Langkah paling mudah, bukan yang paling sempurna..."></textarea>
+        </div>
+        <div class="dialog-actions">
+          <button class="button button-danger" id="delete-idea" type="button">Hapus ide</button>
+          <button class="button button-outline" id="cancel-detail" type="button">Batal</button>
+          <button class="button button-primary" type="submit">Simpan perubahan</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
