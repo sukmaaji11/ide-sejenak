@@ -1,3 +1,5 @@
+begin;
+
 create table if not exists public.sela_licenses (
   user_id uuid primary key references auth.users (id) on delete cascade,
   product_id text not null default 'sela_plus_lifetime'
@@ -184,3 +186,5 @@ create policy "Users can delete their own ideas"
     (select auth.uid()) = user_id
     and (select public.has_sela_plus_lifetime())
   );
+
+commit;
