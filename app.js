@@ -4,6 +4,9 @@ const STORAGE_KEY = "sela.ideas.v1";
 const ONBOARDING_KEY = "sela.onboarding.completed.v1";
 const AUTH_STORAGE_KEY = "sela.auth.session.v1";
 const SUPABASE = window.SELA_SUPABASE || { url: "", publishableKey: "" };
+const SUPPORT_WHATSAPP = typeof SUPABASE.supportWhatsApp === "string"
+  ? SUPABASE.supportWhatsApp.replace(/\D/g, "")
+  : "";
 const SUPABASE_URL = typeof SUPABASE.url === "string" ? SUPABASE.url.replace(/\/+$/, "") : "";
 const SUPABASE_API_KEY = typeof SUPABASE.publishableKey === "string"
   ? SUPABASE.publishableKey.trim()
@@ -23,6 +26,8 @@ let deferredInstallPrompt = null;
 let splashTimer;
 let cloudSession = null;
 let usingCloudIdeas = false;
+let hasPlusLicense = null;
+let licenseCheckError = "";
 let isSignUpMode = false;
 let recoveryAccessToken = "";
 
@@ -127,6 +132,8 @@ function clearAuthSession() {
   }
   cloudSession = null;
   usingCloudIdeas = false;
+  hasPlusLicense = null;
+  licenseCheckError = "";
 }
 
 async function getValidAccessToken() {
@@ -191,6 +198,54 @@ async function fetchCloudIdeas() {
     throw new Error("Data ide dari database tidak sesuai format. Data lokal tetap aman.");
   }
   return records.map(fromIdeaRecord);
+}
+
+async function fetchPlusLicense() {
+  const accessToken = await getValidAccessToken();
+  const result = await supabaseRequest("/rest/v1/rpc/has_sela_plus_lifetime", {
+    method: "POST",
+    accessToken,
+    body: {},
+  });
+  if (typeof result !== "boolean") {
+    throw new Error("Status lisensi dari server tidak valid.");
+  }
+  return result;
+}
+
+async function redeemPlusLicenseCode(event) {
+  event.preventDefault();
+  const codeInput = document.querySelector("#license-code");
+  const button = document.querySelector("#redeem-license");
+  button.disabled = true;
+  accountMessage("Memeriksa kode lisensi...", "");
+  try {
+    const accessToken = await getValidAccessToken();
+    const result = await supabaseRequest("/functions/v1/redeem-license", {
+      method: "POST",
+      accessToken,
+      body: { code: codeInput.value.trim() },
+    });
+    if (!result || result.activated !== true) {
+      throw new Error("Server belum mengonfirmasi aktivasi lisensi.");
+    }
+
+    hasPlusLicense = await fetchPlusLicense();
+    if (!hasPlusLicense) {
+      throw new Error("Kode diterima, tetapi status lisensi belum aktif. Hubungi admin sebelum mencoba lagi.");
+    }
+    ideas = await fetchCloudIdeas();
+    usingCloudIdeas = true;
+    licenseCheckError = "";
+    document.querySelector("#license-code-form").reset();
+    updateAccountUI();
+    render();
+    accountMessage("Sela Plus Lifetime berhasil diaktifkan. Ide akun sekarang tersinkron.", "success");
+  } catch (error) {
+    accountMessage(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function isValidIdeaRecord(record) {
@@ -265,6 +320,9 @@ function localIdeasForImport() {
 }
 
 async function importLocalIdeas() {
+  if (!hasPlusLicense || !usingCloudIdeas) {
+    throw new Error("Lisensi Sela Plus Lifetime aktif diperlukan untuk menggabungkan ide ke cloud.");
+  }
   const localIdeas = localIdeasForImport();
   if (localIdeas.length === 0) {
     accountMessage("Tidak ada ide tersimpan di browser ini untuk digabung.", "success");
@@ -303,7 +361,9 @@ function updateAccountUI() {
   trigger.textContent = signedIn ? "Akun" : "Masuk / sinkronisasi";
   trigger.setAttribute("aria-label", signedIn ? "Pengaturan akun dan sinkronisasi" : "Masuk atau buat akun untuk sinkronisasi");
   badge.innerHTML = signedIn
-    ? '<span aria-hidden="true">●</span> Tersinkron'
+    ? usingCloudIdeas
+      ? '<span aria-hidden="true">●</span> Tersinkron'
+      : '<span aria-hidden="true">●</span> Cloud dikunci'
     : '<span aria-hidden="true">●</span> Tersimpan lokal';
   document.querySelector("#auth-form").hidden = signedIn || Boolean(recoveryAccessToken);
   document.querySelector("#recovery-form").hidden = !recoveryAccessToken;
@@ -312,8 +372,45 @@ function updateAccountUI() {
 
   if (signedIn) {
     document.querySelector("#signed-in-email").textContent = cloudSession.user.email || "Akun Sela";
+    const licenseCard = document.querySelector("#license-card");
+    const licenseTitle = document.querySelector("#license-title");
+    const licenseDescription = document.querySelector("#license-description");
+    const checkLicenseButton = document.querySelector("#check-license");
+    const contactAdminLink = document.querySelector("#contact-admin-whatsapp");
+    const licenseCodeForm = document.querySelector("#license-code-form");
+    document.querySelector("#cloud-note").hidden = !usingCloudIdeas;
+    licenseCard.hidden = false;
+    checkLicenseButton.hidden = hasPlusLicense === true;
+    contactAdminLink.hidden = hasPlusLicense !== false || !/^[1-9]\d{7,14}$/.test(SUPPORT_WHATSAPP);
+    if (!contactAdminLink.hidden) {
+      const message = [
+        "Halo Admin Sela, saya ingin membeli Sela Plus Lifetime.",
+        `Email akun Sela saya: ${cloudSession.user.email || "(belum tercantum)"}`,
+      ].join("\n");
+      contactAdminLink.href = `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(message)}`;
+    }
+    licenseCodeForm.hidden = hasPlusLicense !== false;
+    if (hasPlusLicense === true) {
+      licenseTitle.textContent = "Sela Plus Lifetime aktif";
+      licenseDescription.textContent = "Akun ini dapat menyimpan dan menyinkronkan ide di cloud.";
+    } else if (licenseCheckError) {
+      licenseTitle.textContent = "Lisensi atau sinkronisasi bermasalah";
+      licenseDescription.textContent = licenseCheckError;
+    } else if (hasPlusLicense === false) {
+      licenseTitle.textContent = "Lisensi Sela Plus Lifetime belum aktif";
+      licenseDescription.textContent =
+        "Ide tetap bisa digunakan secara lokal. Masukkan kode dari admin setelah pembelian untuk mengaktifkan sinkronisasi cloud.";
+    } else {
+      licenseTitle.textContent = "Memeriksa lisensi Sela Plus Lifetime";
+      licenseDescription.textContent = "Akses cloud hanya tersedia untuk akun dengan lisensi aktif.";
+    }
+
     const migrationCard = document.querySelector("#migration-card");
     const importButton = document.querySelector("#import-local-ideas");
+    if (!usingCloudIdeas) {
+      migrationCard.hidden = true;
+      return;
+    }
     try {
       const localIdeas = localIdeasForImport();
       const cloudIdeaIds = new Set(ideas.map((idea) => idea.id));
@@ -345,16 +442,30 @@ function sessionFromResponse(response) {
 async function activateCloudSession(session) {
   if (!storeAuthSession(session)) throw new Error("Sesi akun tidak tersimpan.");
   try {
-    const cloudIdeas = await fetchCloudIdeas();
     cloudSession = session;
+    licenseCheckError = "";
+    hasPlusLicense = await fetchPlusLicense();
+    if (!hasPlusLicense) {
+      usingCloudIdeas = false;
+      ideas = loadIdeas();
+      updateAccountUI();
+      render();
+      return false;
+    }
+
+    const cloudIdeas = await fetchCloudIdeas();
     ideas = cloudIdeas;
     usingCloudIdeas = true;
     updateAccountUI();
     render();
+    return true;
   } catch (error) {
-    cloudSession = null;
     usingCloudIdeas = false;
+    hasPlusLicense = null;
+    licenseCheckError = error.message;
+    ideas = loadIdeas();
     updateAccountUI();
+    render();
     throw error;
   }
 }
@@ -365,6 +476,16 @@ async function restoreCloudSession() {
   if (!savedSession) return;
   cloudSession = savedSession;
   try {
+    licenseCheckError = "";
+    hasPlusLicense = await fetchPlusLicense();
+    if (!hasPlusLicense) {
+      usingCloudIdeas = false;
+      ideas = loadIdeas();
+      updateAccountUI();
+      render();
+      return;
+    }
+
     const cloudIdeas = await fetchCloudIdeas();
     ideas = cloudIdeas;
     usingCloudIdeas = true;
@@ -374,8 +495,9 @@ async function restoreCloudSession() {
     if (error.status === 400 || error.status === 401) {
       clearAuthSession();
     } else {
-      cloudSession = null;
       usingCloudIdeas = false;
+      hasPlusLicense = null;
+      licenseCheckError = error.message;
     }
     ideas = loadIdeas();
     updateAccountUI();
@@ -410,9 +532,12 @@ async function submitAuth(event) {
       }
       throw new Error("Login berhasil diproses tetapi sesi tidak diterima. Periksa pengaturan autentikasi Supabase.");
     }
-    await activateCloudSession(sessionFromResponse(response));
+    const hasLicense = await activateCloudSession(sessionFromResponse(response));
     document.querySelector("#auth-form").reset();
-    accountMessage("Berhasil masuk. Ide akunmu sekarang tersinkron.", "success");
+    accountMessage(hasLicense
+      ? "Berhasil masuk. Ide akunmu sekarang tersinkron."
+      : "Berhasil masuk. Ide tetap tersimpan lokal; sinkronisasi cloud memerlukan lisensi Sela Plus Lifetime aktif.",
+    hasLicense ? "success" : "");
   } catch (error) {
     accountMessage(error.message, "error");
   } finally {
@@ -517,6 +642,37 @@ async function signOut() {
     ? `Keluar di perangkat ini berhasil, tetapi Supabase tidak dapat mengakhiri sesi di server: ${remoteError.message}`
     : "Kamu sudah keluar. Ide di perangkat ini tetap tersimpan lokal.",
   remoteError ? "error" : "success");
+}
+
+async function checkPlusLicenseStatus() {
+  const button = document.querySelector("#check-license");
+  button.disabled = true;
+  accountMessage("Memeriksa status lisensi...", "");
+  try {
+    licenseCheckError = "";
+    hasPlusLicense = await fetchPlusLicense();
+    if (hasPlusLicense) {
+      ideas = await fetchCloudIdeas();
+      usingCloudIdeas = true;
+      accountMessage("Sela Plus Lifetime aktif. Ide akun berhasil disinkronkan.", "success");
+    } else {
+      usingCloudIdeas = false;
+      ideas = loadIdeas();
+      accountMessage("Lisensi Sela Plus Lifetime belum aktif untuk akun ini. Ide tetap tersimpan lokal.", "");
+    }
+    updateAccountUI();
+    render();
+  } catch (error) {
+    hasPlusLicense = null;
+    licenseCheckError = `Status lisensi gagal dimuat: ${error.message}`;
+    usingCloudIdeas = false;
+    ideas = loadIdeas();
+    updateAccountUI();
+    render();
+    accountMessage(`Status lisensi gagal diperiksa: ${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function showStatus(message) {
@@ -1002,6 +1158,7 @@ accountDialog.addEventListener("click", (event) => {
 });
 document.querySelector("#auth-form").addEventListener("submit", submitAuth);
 document.querySelector("#recovery-form").addEventListener("submit", submitPasswordRecovery);
+document.querySelector("#license-code-form").addEventListener("submit", redeemPlusLicenseCode);
 document.querySelector("#toggle-auth-mode").addEventListener("click", () => {
   isSignUpMode = !isSignUpMode;
   updateAuthMode();
@@ -1026,6 +1183,7 @@ document.querySelector("#sign-out").addEventListener("click", async (event) => {
   await signOut();
   button.disabled = false;
 });
+document.querySelector("#check-license").addEventListener("click", checkPlusLicenseStatus);
 
 if ("serviceWorker" in navigator
   && (window.location.protocol === "https:"

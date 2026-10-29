@@ -191,6 +191,13 @@ textarea.prompt-input { height: 49px; padding: 8px; resize: vertical; }
 .signed-in-account div { display: grid; gap: 3px; min-width: 0; }
 .signed-in-label { color: #687487; font-size: 9px; }
 .signed-in-account strong { overflow-wrap: anywhere; color: #202a3a; font-size: 11px; }
+.license-card { margin-bottom: 13px; padding: 13px; border: 1px solid #e1e6ee; border-radius: 9px; background: #f5f7fb; }
+.license-card > strong { color: #34425a; font: 700 10px "Manrope", sans-serif; }
+.license-card p { margin: 7px 0 0; color: #687487; font-size: 9px; line-height: 1.55; }
+.license-card .button { min-height: 34px; margin-top: 11px; font-size: 9px; }
+.license-card .button-whatsapp { display: flex; justify-content: center; align-items: center; border: 1px solid #168a58; border-radius: 7px; background: #168a58; color: #fff; font-weight: 700; text-decoration: none; }
+.license-card .button-whatsapp:hover { background: #117247; }
+.license-code-form { margin: 12px 0 13px; }
 .migration-card { margin-bottom: 13px; padding: 13px; border: 1px solid #dce4f7; border-radius: 9px; background: #f5f7fc; }
 .migration-card > strong { color: #34425a; font: 700 10px "Manrope", sans-serif; }
 .migration-card p { margin: 7px 0 0; color: #687487; font-size: 9px; line-height: 1.55; }

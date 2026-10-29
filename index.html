@@ -187,7 +187,7 @@
           <div><p class="eyebrow">AKUN DAN SINKRONISASI</p><h2 id="account-title">Ide kamu, lintas perangkat.</h2></div>
           <button class="dialog-close" id="close-account" type="button" aria-label="Tutup">×</button>
         </div>
-        <p class="account-description" id="account-description">Masuk untuk menyimpan ide di akunmu dan membukanya dari perangkat lain.</p>
+        <p class="account-description" id="account-description">Masuk dengan akun berlisensi Sela Plus Lifetime untuk menyimpan ide di cloud dan membukanya dari perangkat lain.</p>
         <div class="account-message" id="account-message" role="status" aria-live="polite"></div>
         <form id="auth-form">
           <label class="field-label" for="auth-email">Email</label>
@@ -209,13 +209,24 @@
         </form>
         <section class="signed-in-panel" id="signed-in-panel" hidden>
           <div class="signed-in-account"><span class="account-avatar" aria-hidden="true">✦</span><div><span class="signed-in-label">Masuk sebagai</span><strong id="signed-in-email"></strong></div></div>
+          <section class="license-card" id="license-card" hidden aria-live="polite">
+            <strong id="license-title">Memeriksa lisensi Sela Plus Lifetime</strong>
+            <p id="license-description"></p>
+            <a class="button button-whatsapp" id="contact-admin-whatsapp" target="_blank" rel="noopener noreferrer" hidden>Hubungi admin untuk membeli via WhatsApp</a>
+            <button class="button button-outline" id="check-license" type="button">Periksa status lisensi</button>
+          </section>
+          <form class="license-code-form" id="license-code-form" hidden>
+            <label class="field-label" for="license-code">Punya kode lisensi?</label>
+            <input class="form-control" id="license-code" name="licenseCode" autocomplete="off" autocapitalize="characters" maxlength="49" placeholder="SELA-PLUS-XXXX-XXXX-..." required>
+            <button class="button button-primary account-submit" id="redeem-license" type="submit">Aktifkan Sela Plus Lifetime</button>
+          </form>
           <div class="migration-card" id="migration-card" hidden>
             <strong>Ide lama masih ada di browser ini</strong>
             <p id="migration-description"></p>
             <p>Ide lokal hanya akan digabung ke akun jika kamu menekan tombol berikut.</p>
             <button class="button button-outline" id="import-local-ideas" type="button">Gabungkan ide lokal ke akun</button>
           </div>
-          <p class="cloud-note">Ide akun dimuat dari Supabase. Saat keluar, Sela kembali ke ide lokal di browser ini.</p>
+          <p class="cloud-note" id="cloud-note" hidden>Ide akun dimuat dari Supabase. Saat keluar, Sela kembali ke ide lokal di browser ini.</p>
           <button class="button button-outline account-submit" id="sign-out" type="button">Keluar dari akun</button>
         </section>
         <p class="account-footnote">Jangan gunakan perangkat bersama untuk menyimpan ide pribadi. Keluar dari akun setelah selesai.</p>
