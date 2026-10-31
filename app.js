@@ -16,11 +16,20 @@ const STATUSES = {
   thinking: "Lagi dipikirkan",
   saved: "Selesai dikembangkan",
 };
+const PRIORITIES = {
+  do_now: "Kerjakan sekarang",
+  schedule: "Jadwalkan",
+  delegate: "Delegasikan",
+  release: "Kurangi atau lepaskan",
+};
 const ideaGrid = document.querySelector("#idea-grid");
 const statusMessage = document.querySelector("#status-message");
 const dialog = document.querySelector("#idea-dialog");
 let activeFilter = "all";
+let activePriorityFilter = "all";
 let searchQuery = "";
+let titleBeforePrint = "";
+let reopenDialogAfterPrint = false;
 let ideas = loadIdeas();
 let deferredInstallPrompt = null;
 let splashTimer;
@@ -170,6 +179,9 @@ function toIdeaRecord(idea, userId) {
     problem: idea.problem,
     audience: idea.audience,
     next_step: idea.nextStep,
+    priority: idea.priority,
+    action_completed: idea.actionCompleted,
+    blueprint: idea.blueprint,
     created_at: idea.createdAt,
   };
 }
@@ -184,6 +196,9 @@ function fromIdeaRecord(record) {
     problem: record.problem,
     audience: record.audience,
     nextStep: record.next_step,
+    priority: record.priority,
+    actionCompleted: record.action_completed,
+    blueprint: record.blueprint,
     createdAt: record.created_at,
   };
 }
@@ -191,7 +206,7 @@ function fromIdeaRecord(record) {
 async function fetchCloudIdeas() {
   const accessToken = await getValidAccessToken();
   const records = await supabaseRequest(
-    "/rest/v1/ideas?select=id,title,note,category,status,problem,audience,next_step,created_at&order=created_at.desc",
+    "/rest/v1/ideas?select=id,title,note,category,status,problem,audience,next_step,priority,action_completed,blueprint,created_at&order=created_at.desc",
     { accessToken },
   );
   if (!Array.isArray(records) || !records.every(isValidIdeaRecord)) {
@@ -259,7 +274,31 @@ function isValidIdeaRecord(record) {
     && typeof record.problem === "string"
     && typeof record.audience === "string"
     && typeof record.next_step === "string"
+    && (record.priority === null || Object.hasOwn(PRIORITIES, record.priority))
+    && typeof record.action_completed === "boolean"
+    && (record.blueprint === null || isValidBlueprint(record.blueprint))
     && typeof record.created_at === "string";
+}
+
+function isValidBlueprint(blueprint) {
+  return blueprint !== null
+    && typeof blueprint === "object"
+    && typeof blueprint.refinedIdea === "string"
+    && blueprint.refinedIdea.length <= 600
+    && typeof blueprint.problem === "string"
+    && blueprint.problem.length <= 500
+    && typeof blueprint.audience === "string"
+    && blueprint.audience.length <= 300
+    && Array.isArray(blueprint.assumptions)
+    && blueprint.assumptions.length <= 4
+    && blueprint.assumptions.every((item) => typeof item === "string" && item.length <= 240)
+    && Array.isArray(blueprint.firstSteps)
+    && blueprint.firstSteps.length <= 4
+    && blueprint.firstSteps.every((item) => typeof item === "string" && item.length <= 240)
+    && Array.isArray(blueprint.validationQuestions)
+    && blueprint.validationQuestions.length <= 4
+    && blueprint.validationQuestions.every((item) => typeof item === "string" && item.length <= 240)
+    && typeof blueprint.updatedAt === "string";
 }
 
 function sameIdea(first, second) {
@@ -270,6 +309,9 @@ function sameIdea(first, second) {
     && first.problem === second.problem
     && first.audience === second.audience
     && first.nextStep === second.nextStep
+    && first.priority === second.priority
+    && first.actionCompleted === second.actionCompleted
+    && JSON.stringify(first.blueprint) === JSON.stringify(second.blueprint)
     && first.createdAt === second.createdAt;
 }
 
@@ -311,7 +353,7 @@ function localIdeasForImport() {
     if (!Array.isArray(parsed) || !parsed.every(isValidIdea)) {
       throw new Error("Ide lokal tidak valid. Data lokal tidak diubah atau diunggah.");
     }
-    return parsed;
+    return parsed.map(normalizeIdea);
   } catch (error) {
     throw new Error(error instanceof SyntaxError
       ? "Ide lokal tidak bisa dibaca. Data lokal tidak diubah atau diunggah."
@@ -701,6 +743,9 @@ function sampleIdeas() {
       problem: "Susah cari tempat nyaman untuk fokus tanpa harus coba satu-satu.",
       audience: "Aku dan teman-teman yang kerja remote.",
       nextStep: "",
+      priority: null,
+      actionCompleted: false,
+      blueprint: null,
       createdAt: new Date(now - 3600000 * 3).toISOString(),
     },
     {
@@ -712,6 +757,9 @@ function sampleIdeas() {
       problem: "",
       audience: "",
       nextStep: "",
+      priority: null,
+      actionCompleted: false,
+      blueprint: null,
       createdAt: new Date(now - 86400000).toISOString(),
     },
     {
@@ -723,6 +771,9 @@ function sampleIdeas() {
       problem: "Banyak konten terasa menuntut orang untuk selalu maksimal.",
       audience: "Orang yang sedang butuh pengingat kecil yang realistis.",
       nextStep: "Coba tulis lima topik untuk minggu pertama.",
+      priority: "schedule",
+      actionCompleted: false,
+      blueprint: null,
       createdAt: new Date(now - 86400000 * 3).toISOString(),
     },
   ];
@@ -739,7 +790,19 @@ function isValidIdea(idea) {
     && typeof idea.problem === "string"
     && typeof idea.audience === "string"
     && typeof idea.nextStep === "string"
+    && (idea.priority === undefined || idea.priority === null || Object.hasOwn(PRIORITIES, idea.priority))
+    && (idea.actionCompleted === undefined || typeof idea.actionCompleted === "boolean")
+    && (idea.blueprint === undefined || idea.blueprint === null || isValidBlueprint(idea.blueprint))
     && typeof idea.createdAt === "string";
+}
+
+function normalizeIdea(idea) {
+  return {
+    ...idea,
+    priority: idea.priority || null,
+    actionCompleted: idea.actionCompleted === true,
+    blueprint: idea.blueprint || null,
+  };
 }
 
 function loadIdeas() {
@@ -751,7 +814,7 @@ function loadIdeas() {
       showStatus("Data ide yang tersimpan tidak valid. Data belum diubah.");
       return [];
     }
-    return parsed;
+    return parsed.map(normalizeIdea);
   } catch (error) {
     showStatus("Data tidak dapat dibaca dari penyimpanan browser. Periksa izin penyimpanan lalu muat ulang.");
     return sampleIdeas();
@@ -810,8 +873,21 @@ function visibleIdeas() {
   return ideas
     .filter((idea) => {
       if (activeFilter !== "all" && idea.status !== activeFilter) return false;
+      if (activePriorityFilter === "unprioritized" && idea.priority) return false;
+      if (activePriorityFilter !== "all" && activePriorityFilter !== "unprioritized"
+        && idea.priority !== activePriorityFilter) return false;
       if (!searchQuery) return true;
-      return `${idea.title} ${idea.note} ${idea.category} ${idea.problem} ${idea.audience} ${idea.nextStep}`
+      const blueprintText = idea.blueprint
+        ? [
+          idea.blueprint.refinedIdea,
+          idea.blueprint.problem,
+          idea.blueprint.audience,
+          ...idea.blueprint.assumptions,
+          ...idea.blueprint.firstSteps,
+          ...idea.blueprint.validationQuestions,
+        ].join(" ")
+        : "";
+      return `${idea.title} ${idea.note} ${idea.category} ${idea.problem} ${idea.audience} ${idea.nextStep} ${blueprintText}`
         .toLocaleLowerCase("id-ID")
         .includes(searchQuery);
     })
@@ -821,6 +897,13 @@ function visibleIdeas() {
 function ideaMarkup(idea) {
   const note = idea.note || idea.problem || "Belum ada catatan tambahan—bisa kamu lengkapi nanti.";
   const promptAnswers = [idea.problem, idea.audience, idea.nextStep].filter(Boolean).length;
+  const progress = idea.nextStep
+    ? idea.actionCompleted ? "Action selesai" : "Action belum selesai"
+    : `${promptAnswers} dari 2 pertanyaan terisi`;
+  const priority = idea.priority
+    ? `<span class="idea-priority">${escapeHtml(PRIORITIES[idea.priority])}</span>`
+    : "";
+  const blueprint = idea.blueprint ? '<span class="blueprint-indicator">Blueprint siap</span>' : "";
   return `
     <article class="idea-card" data-open-id="${escapeHtml(idea.id)}" tabindex="0" role="button" aria-label="Buka ide: ${escapeHtml(idea.title)}">
       <div class="idea-card-top">
@@ -831,7 +914,9 @@ function ideaMarkup(idea) {
       <h3 class="idea-title">${escapeHtml(idea.title)}</h3>
       <p class="idea-note">${escapeHtml(note)}</p>
       <div class="idea-card-bottom">
-        <span>${promptAnswers ? `${promptAnswers} dari 3 pertanyaan terisi` : "Pikiran awal tersimpan"}</span>
+        <span>${idea.nextStep && idea.actionCompleted ? "✓ " : ""}${progress}</span>
+        ${priority}
+        ${blueprint}
         <span class="develop-link">Buka ide →</span>
       </div>
     </article>`;
@@ -854,9 +939,120 @@ function render() {
   }
 }
 
+function updateBlueprintPrintMetadata() {
+  const activeIdea = ideas.find((idea) => idea.id === document.querySelector("#detail-id").value);
+  const priority = document.querySelector("#detail-priority").value;
+  const action = document.querySelector("#detail-next").value.trim();
+  const completed = document.querySelector("#detail-action-completed").checked;
+  const metadata = [
+    ["Kategori", activeIdea ? activeIdea.category : ""],
+    ["Tahap ide", document.querySelector("#detail-status").selectedOptions[0].textContent],
+    ["Prioritas", priority ? PRIORITIES[priority] : "Belum diprioritaskan"],
+    ["Action", action ? (completed ? "Selesai" : "Belum selesai") : "Belum dibuat"],
+    ["Dibuat", activeIdea ? formatDate(activeIdea.createdAt) : ""],
+  ].filter((item) => item[1]);
+  document.querySelector("#blueprint-print-title").textContent =
+    document.querySelector("#detail-idea-title").value.trim() || "Blueprint Ide";
+  const metadataContainer = document.querySelector("#blueprint-print-meta");
+  metadataContainer.replaceChildren();
+  metadata.forEach(([label, value]) => {
+    const badge = document.createElement("span");
+    badge.className = "blueprint-print-badge";
+    const badgeLabel = document.createElement("span");
+    badgeLabel.className = "blueprint-print-badge-label";
+    badgeLabel.textContent = label;
+    const badgeValue = document.createElement("strong");
+    badgeValue.textContent = value;
+    badge.append(badgeLabel, badgeValue);
+    metadataContainer.append(badge);
+  });
+  const actionDescription = document.querySelector("#blueprint-print-action");
+  actionDescription.hidden = !action;
+  actionDescription.textContent = action ? `Langkah berikutnya: ${action}` : "";
+}
+
+function updateBlueprintPrintContent() {
+  document.querySelector("#print-refined").textContent =
+    document.querySelector("#blueprint-refined").value.trim() || "Belum diisi.";
+  document.querySelector("#print-problem").textContent =
+    document.querySelector("#blueprint-problem").value.trim() || "Belum diisi.";
+  document.querySelector("#print-audience").textContent =
+    document.querySelector("#blueprint-audience").value.trim() || "Belum diisi.";
+  [
+    ["#print-assumptions", "#blueprint-assumptions"],
+    ["#print-first-steps", "#blueprint-first-steps"],
+    ["#print-validation", "#blueprint-validation"],
+  ].forEach(([listSelector, inputSelector]) => {
+    const list = document.querySelector(listSelector);
+    list.replaceChildren();
+    const items = document.querySelector(inputSelector).value
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (items.length === 0) {
+      if (listSelector === "#print-validation") {
+        const empty = document.createElement("li");
+        empty.textContent = "Belum diisi.";
+        list.append(empty);
+      }
+      return;
+    }
+    items.forEach((item) => {
+      const listItem = document.createElement("li");
+      listItem.textContent = item;
+      list.append(listItem);
+    });
+  });
+}
+
+function setBlueprintFields(blueprint) {
+  const editor = document.querySelector("#blueprint-editor");
+  editor.hidden = !blueprint;
+  document.querySelector("#blueprint-refined").value = blueprint ? blueprint.refinedIdea : "";
+  document.querySelector("#blueprint-problem").value = blueprint ? blueprint.problem : "";
+  document.querySelector("#blueprint-audience").value = blueprint ? blueprint.audience : "";
+  document.querySelector("#blueprint-assumptions").value =
+    blueprint ? blueprint.assumptions.join("\n") : "";
+  document.querySelector("#blueprint-first-steps").value =
+    blueprint ? blueprint.firstSteps.join("\n") : "";
+  document.querySelector("#blueprint-validation").value =
+    blueprint ? blueprint.validationQuestions.join("\n") : "";
+  document.querySelector("#export-blueprint").disabled = !blueprint;
+  document.querySelector("#use-blueprint-action").disabled =
+    !blueprint || blueprint.firstSteps.length === 0;
+  updateBlueprintPrintMetadata();
+  updateBlueprintPrintContent();
+}
+
+function blueprintFromFields() {
+  const readList = (selector) => document.querySelector(selector).value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const blueprint = {
+    refinedIdea: document.querySelector("#blueprint-refined").value.trim(),
+    problem: document.querySelector("#blueprint-problem").value.trim(),
+    audience: document.querySelector("#blueprint-audience").value.trim(),
+    assumptions: readList("#blueprint-assumptions"),
+    firstSteps: readList("#blueprint-first-steps"),
+    validationQuestions: readList("#blueprint-validation"),
+    updatedAt: new Date().toISOString(),
+  };
+  if (!isValidBlueprint(blueprint)) {
+    throw new Error("Periksa Blueprint: tiap daftar maksimal 4 baris dan setiap baris maksimal 240 karakter.");
+  }
+  if (!blueprint.refinedIdea) {
+    throw new Error("Ringkasan ide di Blueprint tidak boleh kosong.");
+  }
+  return blueprint;
+}
+
 function openIdea(id) {
   const idea = ideas.find((item) => item.id === id);
   if (!idea) return;
+  document.querySelector("#ai-message").textContent = "";
+  document.querySelector("#ai-message").classList.remove("is-error");
+  document.querySelector("#develop-idea-ai").disabled = false;
   document.querySelector("#detail-id").value = idea.id;
   document.querySelector("#detail-idea-title").value = idea.title;
   document.querySelector("#detail-status").value = idea.status;
@@ -864,9 +1060,217 @@ function openIdea(id) {
   document.querySelector("#detail-problem").value = idea.problem;
   document.querySelector("#detail-audience").value = idea.audience;
   document.querySelector("#detail-next").value = idea.nextStep;
+  document.querySelector("#detail-action-completed").checked = idea.actionCompleted;
+  document.querySelector("#detail-action-completed").disabled = !idea.nextStep;
+  document.querySelector("#action-summary").textContent = idea.nextStep
+    ? `Langkahmu: ${idea.nextStep}`
+    : "Tulis langkah kecil di bagian pengembangan ide terlebih dahulu.";
+  setIdeaPriority(idea.priority);
+  setBlueprintFields(idea.blueprint);
+  document.querySelector("#ai-message").textContent = idea.blueprint
+    ? `Blueprint tersimpan pada ide ini. Terakhir diperbarui ${formatDate(idea.blueprint.updatedAt)}.`
+    : "";
   dialog.showModal();
   document.querySelector("#detail-idea-title").focus();
 }
+
+function setIdeaPriority(priority) {
+  const validPriority = Object.hasOwn(PRIORITIES, priority) ? priority : "";
+  document.querySelector("#detail-priority").value = validPriority;
+  document.querySelectorAll(".priority-option").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.priority === validPriority));
+  });
+  updateBlueprintPrintMetadata();
+}
+
+async function saveCurrentIdeaWithBlueprint(blueprint, successMessage) {
+  const id = document.querySelector("#detail-id").value;
+  const oldIdea = ideas.find((idea) => idea.id === id);
+  const title = document.querySelector("#detail-idea-title").value.trim();
+  if (!oldIdea || !title) throw new Error("Judul ide wajib diisi sebelum Blueprint disimpan.");
+  const nextStep = document.querySelector("#detail-next").value.trim();
+  const nextIdea = {
+    ...oldIdea,
+    title,
+    status: document.querySelector("#detail-status").value,
+    note: document.querySelector("#detail-note").value.trim(),
+    problem: document.querySelector("#detail-problem").value.trim(),
+    audience: document.querySelector("#detail-audience").value.trim(),
+    nextStep,
+    priority: document.querySelector("#detail-priority").value || null,
+    actionCompleted: nextStep.length > 0
+      && document.querySelector("#detail-action-completed").checked,
+    blueprint,
+  };
+  const saved = await saveIdeas(
+    ideas.map((idea) => idea.id === id ? nextIdea : idea),
+    successMessage,
+  );
+  if (saved) {
+    setBlueprintFields(blueprint);
+    updateBlueprintPrintMetadata();
+  }
+  return saved;
+}
+
+document.querySelector("#save-blueprint").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const message = document.querySelector("#ai-message");
+  button.disabled = true;
+  message.classList.remove("is-error");
+  try {
+    const blueprint = blueprintFromFields();
+    const saved = await saveCurrentIdeaWithBlueprint(blueprint, "Blueprint berhasil disimpan.");
+    if (saved) {
+      message.textContent = "Blueprint tersimpan. Kamu bisa menutup lalu membukanya lagi nanti.";
+    } else {
+      message.textContent = "Blueprint belum tersimpan. Periksa pesan penyimpanan di halaman.";
+      message.classList.add("is-error");
+    }
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add("is-error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#export-blueprint").addEventListener("click", () => {
+  if (document.querySelector("#blueprint-editor").hidden) return;
+  updateBlueprintPrintMetadata();
+  updateBlueprintPrintContent();
+  titleBeforePrint = document.title;
+  document.title = `Blueprint - ${document.querySelector("#detail-idea-title").value.trim() || "Ide Sela"}`;
+  reopenDialogAfterPrint = dialog.open && dialog.matches(":modal");
+  if (reopenDialogAfterPrint) {
+    dialog.close();
+    dialog.setAttribute("open", "");
+  }
+  document.body.classList.add("printing-blueprint");
+  window.print();
+});
+window.addEventListener("afterprint", () => {
+  document.body.classList.remove("printing-blueprint");
+  if (titleBeforePrint) document.title = titleBeforePrint;
+  titleBeforePrint = "";
+  if (reopenDialogAfterPrint) {
+    dialog.removeAttribute("open");
+    dialog.showModal();
+  }
+  reopenDialogAfterPrint = false;
+});
+document.querySelector("#use-blueprint-action").addEventListener("click", () => {
+  const firstStep = document.querySelector("#blueprint-first-steps").value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find(Boolean);
+  if (!firstStep) return;
+  const actionInput = document.querySelector("#detail-next");
+  actionInput.value = firstStep;
+  actionInput.dispatchEvent(new Event("input", { bubbles: true }));
+  actionInput.focus();
+});
+
+document.querySelectorAll(".priority-option").forEach((button) => {
+  button.addEventListener("click", () => setIdeaPriority(button.dataset.priority));
+});
+document.querySelector("#clear-priority").addEventListener("click", () => setIdeaPriority(""));
+document.querySelector("#detail-next").addEventListener("input", (event) => {
+  const completed = document.querySelector("#detail-action-completed");
+  const idea = ideas.find((item) => item.id === document.querySelector("#detail-id").value);
+  const nextStep = event.currentTarget.value.trim();
+  completed.disabled = !nextStep;
+  if (!nextStep) completed.checked = false;
+  document.querySelector("#action-summary").textContent = nextStep
+    ? `Langkahmu: ${nextStep}`
+    : "Tulis langkah kecil di bagian pengembangan ide terlebih dahulu.";
+  if (idea && nextStep !== idea.nextStep) completed.checked = false;
+  updateBlueprintPrintMetadata();
+});
+["#detail-idea-title", "#detail-status", "#detail-priority", "#detail-action-completed"].forEach((selector) => {
+  document.querySelector(selector).addEventListener("input", updateBlueprintPrintMetadata);
+  document.querySelector(selector).addEventListener("change", updateBlueprintPrintMetadata);
+});
+document.querySelectorAll(".blueprint-input").forEach((input) => {
+  input.addEventListener("input", () => {
+    document.querySelector("#ai-message").textContent = "Ada perubahan Blueprint yang belum disimpan.";
+    document.querySelector("#ai-message").classList.remove("is-error");
+    updateBlueprintPrintContent();
+  });
+});
+
+document.querySelector("#develop-idea-ai").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const message = document.querySelector("#ai-message");
+  message.textContent = "";
+  message.classList.remove("is-error");
+
+  if (!cloudSession) {
+    message.textContent = "Masuk dengan akun Sela Plus Lifetime untuk mencoba fitur ini.";
+    message.classList.add("is-error");
+    return;
+  }
+  if (!isSupabaseConfigured()) {
+    message.textContent = "Koneksi Sela belum dikonfigurasi.";
+    message.classList.add("is-error");
+    return;
+  }
+
+  const activeIdea = ideas.find((idea) => idea.id === document.querySelector("#detail-id").value);
+  if (!activeIdea) {
+    message.textContent = "Ide ini tidak ditemukan. Tutup lalu buka kembali ide tersebut.";
+    message.classList.add("is-error");
+    return;
+  }
+  if (activeIdea.blueprint
+    && !window.confirm("Blueprint yang tersimpan akan diganti dengan hasil analisis baru. Lanjutkan?")) {
+    return;
+  }
+
+  button.disabled = true;
+  message.textContent = "Sedang membantu mengembangkan idemu...";
+  try {
+    const accessToken = await getValidAccessToken();
+    const response = await supabaseRequest("/functions/v1/develop-idea", {
+      method: "POST",
+      accessToken,
+      body: {
+        title: document.querySelector("#detail-idea-title").value.trim(),
+        note: document.querySelector("#detail-note").value.trim(),
+        category: activeIdea ? activeIdea.category : "",
+        problem: document.querySelector("#detail-problem").value.trim(),
+        audience: document.querySelector("#detail-audience").value.trim(),
+        nextStep: document.querySelector("#detail-next").value.trim(),
+      },
+    });
+    if (!response || !response.result || typeof response.remaining !== "number") {
+      throw new Error("Respons AI tidak lengkap. Coba lagi nanti.");
+    }
+
+    const blueprint = {
+      ...response.result,
+      updatedAt: new Date().toISOString(),
+    };
+    if (!isValidBlueprint(blueprint) || !blueprint.refinedIdea.trim()) {
+      throw new Error("Hasil AI tidak sesuai format Blueprint. Coba lagi nanti.");
+    }
+    setBlueprintFields(blueprint);
+    const saved = await saveCurrentIdeaWithBlueprint(blueprint, "Blueprint AI berhasil disimpan.");
+    if (saved) {
+      message.textContent =
+        `Blueprint tersimpan pada ide ini. Sisa percobaan AI hari ini: ${response.remaining} dari 10.`;
+    } else {
+      message.textContent =
+        `Blueprint berhasil dibuat, tetapi belum tersimpan. Periksa pesan penyimpanan di halaman. Sisa percobaan hari ini: ${response.remaining} dari 10.`;
+      message.classList.add("is-error");
+    }
+  } catch (error) {
+    message.textContent = error.message || "Fitur AI belum dapat digunakan. Coba lagi nanti.";
+    message.classList.add("is-error");
+  } finally {
+    button.disabled = false;
+  }
+});
 
 document.querySelector("#quick-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -886,6 +1290,9 @@ document.querySelector("#quick-form").addEventListener("submit", async (event) =
     problem: "",
     audience: "",
     nextStep: "",
+    priority: null,
+    actionCompleted: false,
+    blueprint: null,
     createdAt: new Date().toISOString(),
   };
   const submitButton = form.querySelector('[type="submit"]');
@@ -910,6 +1317,17 @@ document.querySelector("#detail-form").addEventListener("submit", async (event) 
   const problem = document.querySelector("#detail-problem").value.trim();
   const audience = document.querySelector("#detail-audience").value.trim();
   const nextStep = document.querySelector("#detail-next").value.trim();
+  let blueprint = oldIdea.blueprint;
+  if (!document.querySelector("#blueprint-editor").hidden) {
+    try {
+      blueprint = blueprintFromFields();
+    } catch (error) {
+      document.querySelector("#ai-message").textContent = error.message;
+      document.querySelector("#ai-message").classList.add("is-error");
+      document.querySelector("#blueprint-refined").focus();
+      return;
+    }
+  }
   const nextIdea = {
     ...oldIdea,
     title,
@@ -918,6 +1336,10 @@ document.querySelector("#detail-form").addEventListener("submit", async (event) 
     problem,
     audience,
     nextStep,
+    priority: document.querySelector("#detail-priority").value || null,
+    actionCompleted: nextStep.length > 0
+      && document.querySelector("#detail-action-completed").checked,
+    blueprint,
   };
   const submitButton = event.currentTarget.querySelector('[type="submit"]');
   submitButton.disabled = true;
@@ -971,6 +1393,11 @@ document.querySelectorAll("[data-filter]").forEach((button) => {
     });
     render();
   });
+});
+
+document.querySelector("#priority-filter").addEventListener("change", (event) => {
+  activePriorityFilter = event.currentTarget.value;
+  render();
 });
 
 document.querySelector("#idea-search").addEventListener("input", (event) => {

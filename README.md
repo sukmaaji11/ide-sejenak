@@ -19,10 +19,11 @@ Halaman `perbandingan.html` membandingkan posisi kartu input sebelum dan sesudah
 
 ## Alur produk
 
-1. Tulis judul ide; konteks singkat dan kategori bersifat opsional.
+1. **Capture:** tulis judul ide; konteks singkat dan kategori bersifat opsional.
 2. Tanpa masuk akun, ide masuk ke daftar "Baru masuk" dan tersimpan di browser ini.
-3. Buka kembali ide kapan saja untuk mengisi masalah/kebutuhan, siapa yang terbantu, dan langkah kecil berikutnya.
-4. Pilih tahap ide: baru masuk, lagi dipikirkan, atau selesai dikembangkan.
+3. **Develop:** buka kembali ide untuk menguraikan masalah/kebutuhan, siapa yang terbantu, dan langkah kecil yang dapat dicoba. Teman AI berada di dalam tahap ini dan menyusun Blueprint yang tersimpan di ide, dapat diedit, dibuka kembali, dan dicetak/diunduh sebagai PDF.
+4. **Prioritas:** nilai langkah tindakan dengan Matriks Eisenhower: kerjakan sekarang, jadwalkan, delegasikan, atau kurangi/lepaskan. Prioritas boleh dibiarkan kosong atau diubah kapan saja.
+5. **Action:** tandai langkah tersebut selesai setelah dilakukan. Status action terpisah dari tahap ide (baru masuk, lagi dipikirkan, selesai dikembangkan).
 
 Daftar awal memuat contoh ide agar alurnya mudah dicoba. Contoh dapat diedit atau dihapus.
 
@@ -44,6 +45,27 @@ Sesi akun disimpan di `localStorage`, sehingga jangan masuk di perangkat bersama
 
 Tautan **Lupa password?** mengirim email pemulihan dan membuka formulir untuk menetapkan password baru di Sela.
 Tanpa konfigurasi Supabase, tombol akun tetap menjelaskan bahwa sinkronisasi belum aktif dan mode lokal tetap dapat digunakan. Jangan membagikan password akun atau secret key. Setelah mengubah file konfigurasi atau skema, deploy ulang situs dan pastikan `supabase-config.js` dapat dimuat.
+
+## Uji coba Sela AI
+
+Fitur **Buat / perbarui Blueprint** mengirim hanya ide yang sedang dibuka ke Gemini 3.5 Flash-Lite melalui Edge Function Supabase. Blueprint baru otomatis disimpan pada ide setelah berhasil dibuat; edit manual dapat disimpan dengan tombol **Simpan perubahan Blueprint** atau **Simpan perubahan**. Jangan kirim ide atau catatan yang berisi informasi pribadi/sensitif; sebelum memakai ide nyata, periksa ketentuan privasi dan penggunaan data terbaru dari Google Gemini API.
+
+Untuk proyek Supabase yang sudah menjalankan migrasi lisensi, jalankan `supabase-ai-beta-migration.sql` satu kali di SQL Editor. Untuk proyek baru, `supabase-schema.sql` sudah menyertakan tabel kuota dan fungsi reservasinya.
+
+Uji coba dibatasi server-side hingga **10 percobaan per akun per hari UTC** dan hanya untuk akun dalam allowlist email. Kuota direservasi sebelum memanggil Gemini agar permintaan bersamaan tidak melewati batas; jika Gemini gagal atau jawaban tidak dapat dibaca, percobaan tetap dihitung. Hasil Blueprint yang berhasil dibuat otomatis disimpan pada ide yang sedang dibuka dan dapat diedit kapan saja.
+
+1. Buat Gemini API key melalui [Google AI Studio](https://aistudio.google.com/apikey). Jangan tempelkan key ke chat, aplikasi browser, atau Git.
+2. Tambahkan secrets `GEMINI_API_KEY` dan `SELA_AI_BETA_TESTER_EMAILS` di **Supabase Dashboard → Project Settings → Edge Functions → Secrets**. Isi allowlist dengan email akun penguji, huruf kecil; beberapa alamat dapat dipisahkan koma. Function juga membutuhkan `SUPABASE_URL`, `SUPABASE_ANON_KEY` (atau `SUPABASE_PUBLISHABLE_KEY`), dan `SUPABASE_SERVICE_ROLE_KEY` yang tersedia di environment Edge Functions.
+3. Deploy function dari root proyek: `supabase functions deploy develop-idea --project-ref <PROJECT_REF>`. Function memverifikasi sesi login, email allowlist, lisensi aktif, dan kuota di server. Jangan menonaktifkan verifikasi JWT.
+4. Deploy ulang situs HTTPS agar tombol AI tersedia. Untuk berhenti mengizinkan penguji, kosongkan secret `SELA_AI_BETA_TESTER_EMAILS`; jangan hapus secret Gemini jika function masih dipakai.
+
+Harga kredit dan paket AI belum ditetapkan. Pantau kualitas jawaban dan penggunaan/biaya API terlebih dahulu sebelum membuka uji coba lebih luas.
+
+## Blueprint, prioritas, dan status action
+
+Untuk proyek Supabase yang sudah ada, jalankan `supabase-priority-action-migration.sql` satu kali di SQL Editor sebelum memakai versi aplikasi terbaru. Migrasi menambah prioritas tindakan, status action, dan Blueprint tersimpan tanpa menghapus atau mengubah isi ide yang sudah ada. Proyek baru mendapat kolom-kolom ini dari `supabase-schema.sql`.
+
+Blueprint berisi ringkasan ide, masalah, audiens, asumsi, langkah awal, dan pertanyaan validasi. Hasil AI disimpan ke ide yang sedang dibuka; membuat ulang Blueprint meminta konfirmasi sebelum mengganti hasil sebelumnya. Perubahan yang diedit dapat disimpan dari tombol Blueprint atau bersama **Simpan perubahan**. Tombol **Unduh PDF** membuka dialog cetak browser; pilih **Save as PDF / Simpan sebagai PDF** pada dialog tersebut.
 
 ## Lisensi Sela Plus Lifetime (aktivasi manual)
 

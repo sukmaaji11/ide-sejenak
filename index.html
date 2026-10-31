@@ -132,6 +132,17 @@
               <button type="button" class="filter-tab" data-filter="thinking" aria-pressed="false">Lagi dipikirkan</button>
               <button type="button" class="filter-tab" data-filter="saved" aria-pressed="false">Selesai dikembangkan</button>
             </div>
+            <label class="priority-filter" for="priority-filter">
+              <span>Prioritas action</span>
+              <select id="priority-filter">
+                <option value="all">Semua prioritas</option>
+                <option value="unprioritized">Belum diprioritaskan</option>
+                <option value="do_now">Kerjakan sekarang</option>
+                <option value="schedule">Jadwalkan</option>
+                <option value="delegate">Delegasikan</option>
+                <option value="release">Kurangi atau lepaskan</option>
+              </select>
+            </label>
             <span id="visible-count" class="visible-count">0 ide</span>
           </div>
           <div class="idea-grid" id="idea-grid" aria-live="polite"></div>
@@ -165,14 +176,145 @@
         <label class="field-label" for="detail-note">Catatan / konteks</label>
         <textarea class="form-control textarea" id="detail-note" maxlength="1000" placeholder="Apa yang membuatmu terpikir soal ini?"></textarea>
         <div class="prompt-card">
-          <p class="prompt-intro">Kalau mau, pikirkan satu-satu. Tidak perlu dijawab semua sekarang.</p>
+          <div class="workflow-step"><span>2</span><span class="eyebrow">DEVELOP</span></div>
+          <p class="prompt-intro">Kembangkan idemu pelan-pelan. Tidak perlu dijawab semua sekarang.</p>
           <label class="field-label" for="detail-problem">Masalah atau kebutuhan apa yang terlihat?</label>
           <textarea class="form-control prompt-input" id="detail-problem" maxlength="500" placeholder="Tuliskan seadanya..."></textarea>
           <label class="field-label" for="detail-audience">Siapa yang mungkin terbantu?</label>
           <input class="form-control prompt-input" id="detail-audience" maxlength="200" placeholder="Dirimu, teman, komunitas...">
           <label class="field-label" for="detail-next">Langkah kecil apa yang bisa dicoba?</label>
           <textarea class="form-control prompt-input" id="detail-next" maxlength="500" placeholder="Langkah paling mudah, bukan yang paling sempurna..."></textarea>
+          <section class="ai-assist" aria-labelledby="ai-assist-title">
+            <div>
+              <h3 id="ai-assist-title">Bantuan AI untuk Blueprint</h3>
+              <p>AI membantu menyusun draf Blueprint dari ide dan konteks di atas. Periksa dan edit sebelum menyimpannya.</p>
+            </div>
+            <button class="button button-ai" id="develop-idea-ai" type="button">✦ Buat / perbarui Blueprint</button>
+            <p class="ai-message" id="ai-message" role="status" aria-live="polite"></p>
+            <section class="blueprint-editor" id="blueprint-editor" aria-labelledby="blueprint-editor-title" hidden>
+              <header class="blueprint-print-header">
+                <div class="blueprint-print-brand">
+                  <span class="blueprint-print-mark" aria-hidden="true">
+                    <span>s.</span><i></i>
+                  </span>
+                  <span class="blueprint-print-brand-copy">
+                    <span class="blueprint-print-wordmark">sela</span>
+                    <span class="blueprint-print-tagline">Tempat ide menemukan arah.</span>
+                  </span>
+                  <span class="blueprint-print-label"><span aria-hidden="true">✦</span> BLUEPRINT IDE</span>
+                </div>
+                <p class="blueprint-print-kicker">DARI IDE MENJADI ARAH</p>
+                <h1 id="blueprint-print-title"></h1>
+                <div class="blueprint-print-meta" id="blueprint-print-meta" aria-label="Informasi ide"></div>
+                <p class="blueprint-print-action" id="blueprint-print-action"></p>
+              </header>
+              <div class="blueprint-heading">
+                <div><p class="eyebrow">OUTPUT SELA</p><h3 id="blueprint-editor-title">Blueprint ide</h3></div>
+                <button class="button button-outline blueprint-export" id="export-blueprint" type="button">Unduh PDF</button>
+              </div>
+              <div class="blueprint-print-content" id="blueprint-print-content">
+                <section class="blueprint-print-section blueprint-print-summary">
+                  <header class="blueprint-print-group-heading">
+                    <span class="blueprint-print-group-number">01</span>
+                    <div><span class="blueprint-print-section-label">INTI IDE</span></div>
+                  </header>
+                  <p id="print-refined"></p>
+                </section>
+                <div class="blueprint-print-context">
+                  <section class="blueprint-print-section">
+                    <span class="blueprint-print-section-label">MASALAH YANG TERLIHAT</span>
+                    <h2>Masalah atau kebutuhan</h2>
+                    <p id="print-problem"></p>
+                  </section>
+                  <section class="blueprint-print-section">
+                    <span class="blueprint-print-section-label">ORANG YANG DITUJU</span>
+                    <h2>Audiens yang mungkin terbantu</h2>
+                    <p id="print-audience"></p>
+                  </section>
+                </div>
+                <section class="blueprint-print-plan">
+                  <header class="blueprint-print-group-heading">
+                    <span class="blueprint-print-group-number">02</span>
+                    <div>
+                      <span class="blueprint-print-section-label">DARI ASUMSI KE AKSI</span>
+                      <h2>Rencana untuk menguji ide</h2>
+                    </div>
+                  </header>
+                  <div class="blueprint-print-plan-grid">
+                    <section class="blueprint-print-section">
+                      <span class="blueprint-print-section-label">YANG PERLU DIPASTIKAN</span>
+                      <h3>Asumsi</h3>
+                      <ul id="print-assumptions"></ul>
+                    </section>
+                    <section class="blueprint-print-section blueprint-print-steps">
+                      <span class="blueprint-print-section-label">MULAI DARI SINI</span>
+                      <h3>Langkah awal</h3>
+                      <ol id="print-first-steps"></ol>
+                    </section>
+                  </div>
+                </section>
+                <section class="blueprint-print-validation">
+                  <div class="blueprint-print-validation-heading">
+                    <span class="blueprint-print-group-number">03</span>
+                    <div>
+                      <span class="blueprint-print-section-label">SEBELUM MELANGKAH LEBIH JAUH</span>
+                      <h2>Pertanyaan untuk dibawa saat menguji</h2>
+                    </div>
+                  </div>
+                  <ol id="print-validation"></ol>
+                </section>
+              </div>
+              <footer class="blueprint-print-footer">
+                <span>Ide tidak harus langsung jadi rencana.</span>
+                <span>Dibuat dengan <strong>sela</strong></span>
+              </footer>
+              <label class="field-label" for="blueprint-refined">Ringkasan ide</label>
+              <textarea class="form-control blueprint-input" id="blueprint-refined" maxlength="600"></textarea>
+              <label class="field-label" for="blueprint-problem">Masalah atau kebutuhan</label>
+              <textarea class="form-control blueprint-input" id="blueprint-problem" maxlength="500"></textarea>
+              <label class="field-label" for="blueprint-audience">Audiens yang mungkin terbantu</label>
+              <textarea class="form-control blueprint-input" id="blueprint-audience" maxlength="300"></textarea>
+              <label class="field-label" for="blueprint-assumptions">Asumsi yang perlu diuji <span>(satu per baris)</span></label>
+              <textarea class="form-control blueprint-input blueprint-list-input" id="blueprint-assumptions" maxlength="1000"></textarea>
+              <label class="field-label" for="blueprint-first-steps">Langkah awal <span>(satu per baris)</span></label>
+              <textarea class="form-control blueprint-input blueprint-list-input" id="blueprint-first-steps" maxlength="1000"></textarea>
+              <button class="blueprint-use-action" id="use-blueprint-action" type="button">Gunakan langkah pertama sebagai Action</button>
+              <label class="field-label" for="blueprint-validation">Pertanyaan validasi <span>(satu per baris)</span></label>
+              <textarea class="form-control blueprint-input blueprint-list-input" id="blueprint-validation" maxlength="1000"></textarea>
+              <button class="button button-outline" id="save-blueprint" type="button">Simpan perubahan Blueprint</button>
+            </section>
+          </section>
         </div>
+        <section class="priority-card" aria-labelledby="priority-title">
+          <div class="workflow-step"><span>3</span><span class="eyebrow">PRIORITAS</span></div>
+          <h3 id="priority-title">Di mana langkah ini di Matriks Eisenhower?</h3>
+          <p class="priority-description">Nilai tindakanmu, bukan ide mentahnya. Pilihan ini bisa diubah kapan saja.</p>
+          <input id="detail-priority" type="hidden" value="">
+          <div class="priority-grid" role="group" aria-label="Pilih prioritas tindakan">
+            <button class="priority-option priority-do-now" type="button" data-priority="do_now" aria-pressed="false">
+              <strong>Penting &amp; mendesak</strong><span>Kerjakan sekarang</span>
+            </button>
+            <button class="priority-option priority-schedule" type="button" data-priority="schedule" aria-pressed="false">
+              <strong>Penting, tidak mendesak</strong><span>Jadwalkan</span>
+            </button>
+            <button class="priority-option priority-delegate" type="button" data-priority="delegate" aria-pressed="false">
+              <strong>Tidak penting, mendesak</strong><span>Delegasikan</span>
+            </button>
+            <button class="priority-option priority-release" type="button" data-priority="release" aria-pressed="false">
+              <strong>Tidak penting, tidak mendesak</strong><span>Kurangi atau lepaskan</span>
+            </button>
+          </div>
+          <button class="priority-clear" id="clear-priority" type="button">Belum menentukan prioritas</button>
+        </section>
+        <section class="action-card" aria-labelledby="action-title">
+          <div class="workflow-step"><span>4</span><span class="eyebrow">ACTION</span></div>
+          <h3 id="action-title">Sudah mengambil langkah ini?</h3>
+          <p class="action-description" id="action-summary">Tulis langkah kecil di bagian pengembangan ide terlebih dahulu.</p>
+          <div class="action-complete">
+            <input id="detail-action-completed" type="checkbox" disabled>
+            <label for="detail-action-completed">Tandai action selesai</label>
+          </div>
+        </section>
         <div class="dialog-actions">
           <button class="button button-danger" id="delete-idea" type="button">Hapus ide</button>
           <button class="button button-outline" id="cancel-detail" type="button">Batal</button>

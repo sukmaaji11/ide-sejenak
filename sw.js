@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "sela-shell-v5";
+const CACHE_NAME = "sela-shell-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
